@@ -40,7 +40,7 @@ class BinanceFeed {
   }
 
   connect(): void {
-    const url = `${config.binance.wsUrl}/ws/${this.SYMBOLS.map((s) => `${s}@ticker`).join('/')}`;
+    const url = `${config.binance.wsUrl}/${this.SYMBOLS.map((s) => `${s}@ticker`).join('/')}`;
 
     this.ws = new WebSocket(url);
 
