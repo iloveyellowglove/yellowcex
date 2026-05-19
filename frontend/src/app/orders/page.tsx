@@ -1,11 +1,15 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../lib/auth';
 import { Header } from '../../components/layout/Header';
 import { apiGet, apiDelete } from '../../lib/api';
+import { ArrowUpDown, Search } from 'lucide-react';
 import type { Order, OrderStatus } from '@/types/shared';
+
+type SortField = 'created_at' | 'pair' | 'side' | 'type' | 'price' | 'amount' | 'status';
+type SortDir = 'asc' | 'desc';
 
 export default function OrdersPage() {
   const { user, loading } = useAuth();
@@ -13,6 +17,9 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [fetching, setFetching] = useState(true);
+  const [sortField, setSortField] = useState<SortField>('created_at');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [search, setSearch] = useState('');
 
   const fetchOrders = async () => {
     const query = statusFilter !== 'all' ? `?status=${statusFilter}` : '';
@@ -31,30 +38,82 @@ export default function OrdersPage() {
     if (res.success) fetchOrders();
   };
 
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir('desc');
+    }
+  };
+
+  const filteredOrders = useMemo(() => {
+    let result = [...orders];
+    if (search) {
+      const q = search.toLowerCase();
+      result = result.filter((o) => o.pair.toLowerCase().includes(q));
+    }
+    result.sort((a, b) => {
+      let cmp = 0;
+      if (sortField === 'created_at') cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      else if (sortField === 'price') cmp = parseFloat(a.price) - parseFloat(b.price);
+      else if (sortField === 'amount') cmp = parseFloat(a.amount) - parseFloat(b.amount);
+      else cmp = String(a[sortField] || '').localeCompare(String(b[sortField] || ''));
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+    return result;
+  }, [orders, search, sortField, sortDir]);
+
   if (!user) return null;
 
-  const tabs: { label: string; value: string }[] = [
-    { label: 'All', value: 'all' },
+  const tabs: { label: string; value: string; count?: number }[] = [
+    { label: 'All Orders', value: 'all' },
     { label: 'Open', value: 'open' },
+    { label: 'Partial', value: 'partial' },
     { label: 'Filled', value: 'filled' },
     { label: 'Cancelled', value: 'cancelled' },
   ];
 
-  return (
-    <div className="min-h-screen bg-[hsl(220,13%,7%)] flex flex-col">
-      <Header />
-      <div className="max-w-5xl mx-auto w-full px-6 py-8">
-        <h1 className="text-2xl font-bold mb-6">Orders</h1>
+  const SortIcon = ({ field }: { field: SortField }) => (
+    <button
+      onClick={() => handleSort(field)}
+      className="inline-flex items-center hover:text-white transition-colors"
+    >
+      <ArrowUpDown size={12} className={sortField === field ? 'text-brand' : ''} />
+    </button>
+  );
 
-        <div className="flex gap-2 mb-4">
+  return (
+    <div className="min-h-screen bg-[#0B0E11] flex flex-col">
+      <Header />
+      <div className="max-w-6xl mx-auto w-full px-6 py-8">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-white">Orders</h1>
+            <p className="text-sm text-[#848E9C] mt-1">Track and manage your trading orders</p>
+          </div>
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#474D57]" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by pair..."
+              className="pl-8 pr-3 py-1.5 bg-[#1E2329] border border-[#2B3139] rounded-lg text-sm text-white placeholder-[#474D57] focus:outline-none focus:border-brand w-48"
+            />
+          </div>
+        </div>
+
+        {/* Status tabs */}
+        <div className="flex gap-1 mb-4 p-1 bg-[#1E2329] rounded-lg inline-flex flex-wrap">
           {tabs.map((tab) => (
             <button
               key={tab.value}
               onClick={() => setStatusFilter(tab.value)}
-              className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+              className={`px-4 py-1.5 text-xs font-medium rounded-md transition-colors ${
                 statusFilter === tab.value
-                  ? 'bg-brand text-black font-medium'
-                  : 'bg-[hsl(220,15%,11%)] text-[hsl(220,10%,70%)] border border-[hsl(220,13%,18%)]'
+                  ? 'bg-brand text-black'
+                  : 'text-[#848E9C] hover:text-white'
               }`}
             >
               {tab.label}
@@ -63,56 +122,79 @@ export default function OrdersPage() {
         </div>
 
         {fetching ? (
-          <div className="text-center py-12 text-[hsl(220,10%,50%)]">Loading orders...</div>
-        ) : orders.length === 0 ? (
-          <div className="text-center py-12 text-[hsl(220,10%,50%)]">
-            No orders found. <a href="/trade" className="text-brand hover:underline">Start trading</a>
+          <div className="flex items-center justify-center py-20">
+            <div className="animate-spin w-8 h-8 border-2 border-brand border-t-transparent rounded-full" />
+          </div>
+        ) : filteredOrders.length === 0 ? (
+          <div className="text-center py-20">
+            <h3 className="text-lg font-semibold text-white mb-2">No orders found</h3>
+            <p className="text-sm text-[#848E9C]">
+              <a href="/trade" className="text-brand hover:underline">Start trading</a> to see your orders here.
+            </p>
           </div>
         ) : (
-          <div className="space-y-1">
-            <div className="grid grid-cols-7 gap-2 px-3 py-2 text-xs text-[hsl(220,10%,50%)] uppercase tracking-wider">
-              <span>Pair</span>
-              <span>Side</span>
-              <span>Type</span>
-              <span>Price</span>
-              <span>Amount/Filled</span>
-              <span>Status</span>
-              <span>Action</span>
+          <div className="bg-[#1E2329] border border-[#2B3139] rounded-xl overflow-hidden">
+            {/* Table header */}
+            <div className="grid grid-cols-8 gap-3 px-4 py-2.5 text-[10px] text-[#474D57] uppercase tracking-wider bg-[#0B0E11]/50 border-b border-[#2B3139]">
+              <span className="flex items-center gap-1">Pair <SortIcon field="pair" /></span>
+              <span className="flex items-center gap-1">Side <SortIcon field="side" /></span>
+              <span className="flex items-center gap-1">Type <SortIcon field="type" /></span>
+              <span className="flex items-center gap-1 text-right">Price <SortIcon field="price" /></span>
+              <span className="text-right">Amount</span>
+              <span className="text-right">Filled</span>
+              <span className="flex items-center gap-1">Status <SortIcon field="status" /></span>
+              <span className="text-right">Action</span>
             </div>
-            {orders.map((order) => (
-              <div
-                key={order.id}
-                className="grid grid-cols-7 gap-2 px-3 py-3 bg-[hsl(220,15%,11%)] border border-[hsl(220,13%,18%)] rounded-lg text-sm items-center"
-              >
-                <span className="font-mono">{order.pair}</span>
-                <span className={order.side === 'buy' ? 'text-green-400' : 'text-red-400'}>
-                  {order.side.toUpperCase()}
-                </span>
-                <span className="text-[hsl(220,10%,60%)]">{order.type}</span>
-                <span className="font-mono">{parseFloat(order.price).toFixed(2)}</span>
-                <span className="font-mono text-xs">
-                  {parseFloat(order.filled)}/{parseFloat(order.amount)}
-                </span>
-                <span className={`text-xs px-1.5 py-0.5 rounded ${
-                  order.status === 'filled' ? 'bg-green-900/30 text-green-400' :
-                  order.status === 'open' ? 'bg-blue-900/30 text-blue-400' :
-                  order.status === 'partial' ? 'bg-yellow-900/30 text-yellow-400' :
-                  'bg-red-900/30 text-red-400'
-                }`}>
-                  {order.status}
-                </span>
-                <span>
-                  {(order.status === 'open' || order.status === 'partial') && (
-                    <button
-                      onClick={() => handleCancel(order.id)}
-                      className="text-xs text-red-400 hover:underline"
+
+            {/* Table body */}
+            <div className="divide-y divide-[#2B3139]">
+              {filteredOrders.map((order) => (
+                <div
+                  key={order.id}
+                  className="grid grid-cols-8 gap-3 px-4 py-3 text-sm items-center hover:bg-[#2B3139]/50 transition-colors"
+                >
+                  <span className="font-mono font-medium text-white text-xs">{order.pair}</span>
+                  <span className={`text-xs font-semibold ${order.side === 'buy' ? 'text-[#0ECB81]' : 'text-[#F6465D]'}`}>
+                    {order.side.toUpperCase()}
+                  </span>
+                  <span className="text-xs text-[#848E9C]">{order.type}</span>
+                  <span className="font-mono text-right text-xs text-white">
+                    {parseFloat(order.price).toLocaleString(undefined, { maximumFractionDigits: 6 })}
+                  </span>
+                  <span className="font-mono text-right text-xs text-[#EAECEF]">
+                    {parseFloat(order.amount).toFixed(4)}
+                  </span>
+                  <span className="font-mono text-right text-xs text-[#848E9C]">
+                    {parseFloat(order.filled).toFixed(4)}
+                  </span>
+                  <span>
+                    <span
+                      className={`text-[10px] px-2 py-0.5 rounded font-medium ${
+                        order.status === 'filled'
+                          ? 'bg-[#0ECB81]/10 text-[#0ECB81]'
+                          : order.status === 'open'
+                          ? 'bg-[#3B82F6]/10 text-[#3B82F6]'
+                          : order.status === 'partial'
+                          ? 'bg-[#F0B90B]/10 text-[#F0B90B]'
+                          : 'bg-[#F6465D]/10 text-[#F6465D]'
+                      }`}
                     >
-                      Cancel
-                    </button>
-                  )}
-                </span>
-              </div>
-            ))}
+                      {order.status}
+                    </span>
+                  </span>
+                  <span className="text-right">
+                    {(order.status === 'open' || order.status === 'partial') && (
+                      <button
+                        onClick={() => handleCancel(order.id)}
+                        className="text-xs text-[#F6465D] hover:underline font-medium"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>

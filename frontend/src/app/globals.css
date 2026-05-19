@@ -2,20 +2,23 @@
 @tailwind components;
 @tailwind utilities;
 
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
 @layer base {
   :root {
-    --color-brand: 38 92% 50%;
-    --color-brand-foreground: 0 0% 100%;
-    --color-background: 220 13% 7%;
+    --color-brand: 48 96% 49%;
+    --color-brand-foreground: 0 0% 0%;
+    --color-background: 216 18% 5%;
     --color-foreground: 0 0% 95%;
-    --color-card: 220 15% 11%;
+    --color-card: 216 15% 8%;
     --color-card-foreground: 0 0% 95%;
-    --color-border: 220 13% 18%;
-    --color-muted: 220 13% 16%;
-    --color-muted-foreground: 220 10% 60%;
+    --color-border: 216 10% 14%;
+    --color-muted: 216 10% 12%;
+    --color-muted-foreground: 216 8% 55%;
     --color-positive: 147 76% 42%;
     --color-negative: 0 76% 54%;
-    --color-accent: 38 92% 50%;
+    --color-accent: 48 96% 49%;
+    --color-hover: 216 12% 12%;
   }
 }
 
@@ -27,25 +30,30 @@
 
 html, body {
   height: 100%;
-  background-color: hsl(220 13% 7%);
-  color: hsl(0 0% 95%);
-  font-family: 'Inter', system-ui, sans-serif;
+  background-color: #0B0E11;
+  color: #EAECEF;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Custom scrollbar */
+/* Binance-style scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
-  background: hsl(220 13% 12%);
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: hsl(220 13% 22%);
+  background: #2B3139;
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(220 13% 32%);
+  background: #474D57;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 /* Number input hide arrows */
@@ -58,12 +66,50 @@ input[type='number'] {
   -moz-appearance: textfield;
 }
 
+/* Remove input autofill background */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 30px #1E2329 inset !important;
+  -webkit-text-fill-color: #EAECEF !important;
+}
+
 @layer utilities {
-  .text-positive { color: hsl(147 76% 42%); }
-  .text-negative { color: hsl(0 76% 54%); }
-  .bg-positive { background-color: hsl(147 76% 42%); }
-  .bg-negative { background-color: hsl(0 76% 54%); }
-  .text-brand { color: hsl(38 92% 50%); }
-  .bg-brand { background-color: hsl(38 92% 50%); }
-  .border-brand { border-color: hsl(38 92% 50%); }
+  .text-positive { color: #0ECB81; }
+  .text-negative { color: #F6465D; }
+  .bg-positive { background-color: #0ECB81; }
+  .bg-negative { background-color: #F6465D; }
+  .text-brand { color: #F0B90B; }
+  .bg-brand { background-color: #F0B90B; }
+  .border-brand { border-color: #F0B90B; }
+
+  .text-brand-hover { color: #F8D33E; }
+  .bg-brand-hover { background-color: #F8D33E; }
+
+  .bg-surface { background-color: #0B0E11; }
+  .bg-elevated { background-color: #1E2329; }
+  .bg-hover { background-color: #2B3139; }
+  .border-default { border-color: #2B3139; }
+
+  .animate-fade-in {
+    animation: fadeIn 0.2s ease-out;
+  }
+  .animate-slide-down {
+    animation: slideDown 0.2s ease-out;
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ticker-scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
+import { createChart, ColorType, type IChartApi, type ISeriesApi, type CandlestickData, type Time } from 'lightweight-charts';
 import { usePriceStore } from '../../store/trading';
 import type { TradingPair } from '@/types/shared';
 
@@ -9,71 +10,159 @@ interface Props {
 }
 
 export function TradingChart({ pair }: Props) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const price = usePriceStore((s) => s.getPrice(pair));
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const candleDataRef = useRef<CandlestickData[]>([]);
+  const currentCandleRef = useRef<CandlestickData | null>(null);
+  const price = usePriceStore((s) => s.prices[pair]);
+  const currentPrice = price?.price;
 
-  // Simple canvas chart placeholder
+  // Initialize chart
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (!chartContainerRef.current) return;
 
-    const w = canvas.width = canvas.offsetWidth * 2;
-    const h = canvas.height = canvas.offsetHeight * 2;
-    ctx.scale(2, 2);
+    const chart = createChart(chartContainerRef.current, {
+      layout: {
+        background: { type: ColorType.Solid, color: '#0B0E11' },
+        textColor: '#848E9C',
+      },
+      grid: {
+        vertLines: { color: '#1E2329' },
+        horzLines: { color: '#1E2329' },
+      },
+      crosshair: {
+        mode: 0,
+        vertLine: {
+          color: '#2B3139',
+          width: 1,
+          style: 2,
+          labelBackgroundColor: '#1E2329',
+        },
+        horzLine: {
+          color: '#2B3139',
+          width: 1,
+          style: 2,
+          labelBackgroundColor: '#1E2329',
+        },
+      },
+      rightPriceScale: {
+        borderColor: '#2B3139',
+        scaleMargins: { top: 0.1, bottom: 0.1 },
+      },
+      timeScale: {
+        borderColor: '#2B3139',
+        timeVisible: true,
+        secondsVisible: false,
+        fixLeftEdge: true,
+      },
+      width: chartContainerRef.current.clientWidth,
+      height: chartContainerRef.current.clientHeight,
+    });
 
-    // Draw background
-    ctx.fillStyle = '#0f1117';
-    ctx.fillRect(0, 0, w, h);
+    const candleSeries = chart.addCandlestickSeries({
+      upColor: '#0ECB81',
+      downColor: '#F6465D',
+      borderUpColor: '#0ECB81',
+      borderDownColor: '#F6465D',
+      wickUpColor: '#0ECB81',
+      wickDownColor: '#F6465D',
+    });
 
-    // Grid lines
-    ctx.strokeStyle = '#1a1d27';
-    ctx.lineWidth = 0.5;
-    for (let i = 1; i < 6; i++) {
-      const y = (h / 2 / 6) * i;
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(w / 2, y);
-      ctx.stroke();
+    chartRef.current = chart;
+    seriesRef.current = candleSeries;
+
+    const handleResize = () => {
+      if (chartContainerRef.current) {
+        chart.applyOptions({
+          width: chartContainerRef.current.clientWidth,
+          height: chartContainerRef.current.clientHeight,
+        });
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      chart.remove();
+      chartRef.current = null;
+      seriesRef.current = null;
+    };
+  }, []);
+
+  // Reset candles when pair changes
+  useEffect(() => {
+    if (seriesRef.current) {
+      candleDataRef.current = [];
+      currentCandleRef.current = null;
+      seriesRef.current.setData([]);
+    }
+  }, [pair]);
+
+  // Build candles from price ticks
+  useEffect(() => {
+    if (!currentPrice || !seriesRef.current) return;
+
+    const priceVal = parseFloat(currentPrice);
+    if (!priceVal) return;
+
+    const now = Math.floor(Date.now() / 1000) as Time;
+    const candleTime = (Math.floor(Number(now) / 60) * 60) as Time; // 1-minute candles
+
+    const series = seriesRef.current;
+    let current = currentCandleRef.current;
+
+    if (!current || current.time !== candleTime) {
+      // Close previous candle
+      if (current) {
+        candleDataRef.current.push(current);
+        if (candleDataRef.current.length > 300) {
+          candleDataRef.current = candleDataRef.current.slice(-300);
+        }
+        series.setData(candleDataRef.current);
+      }
+
+      // Start new candle
+      current = {
+        time: candleTime,
+        open: priceVal,
+        high: priceVal,
+        low: priceVal,
+        close: priceVal,
+      };
+      currentCandleRef.current = current;
+    } else {
+      // Update current candle
+      if (priceVal > current.high) current.high = priceVal;
+      if (priceVal < current.low) current.low = priceVal;
+      current.close = priceVal;
     }
 
-    // Price label
-    ctx.fillStyle = '#e6b800';
-    ctx.font = 'bold 16px Inter, system-ui, sans-serif';
-    ctx.fillText(pair, 16, 24);
-
-    ctx.fillStyle = '#8b95a8';
-    ctx.font = '14px Inter, system-ui, sans-serif';
-    const priceText = price && price !== '0' ? `$${parseFloat(price).toFixed(2)}` : 'Loading...';
-    ctx.fillText(priceText, 16, 46);
-
-    // Placeholder line
-    ctx.strokeStyle = '#1a3a2a';
-    ctx.lineWidth = 1;
-    const midY = canvas.offsetHeight / 2;
-    ctx.beginPath();
-    ctx.moveTo(0, midY);
-    ctx.lineTo(canvas.offsetWidth, midY + 30);
-    ctx.stroke();
-
-  }, [pair, price]);
+    // Update the series with all data + current candle
+    series.setData([...candleDataRef.current, current]);
+  }, [currentPrice]);
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-[hsl(220,13%,15%)]">
-        <span className="text-sm font-medium">{pair}</span>
-        <span className={`text-sm font-mono ${parseFloat(price || '0') > 0 ? 'text-green-400' : 'text-[hsl(220,10%,50%)]'}`}>
-          {price && price !== '0' ? `$${parseFloat(price).toFixed(2)}` : '—'}
-        </span>
+      <div className="flex items-center justify-between px-3 py-2 border-b border-[#2B3139] shrink-0">
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-semibold text-white">{pair}</span>
+          {currentPrice && (
+            <span className="text-sm font-mono text-[#0ECB81]">
+              ${parseFloat(currentPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
+            </span>
+          )}
+        </div>
+        {price && (
+          <div className="flex items-center gap-3 text-[10px] text-[#848E9C]">
+            <span>24h H: {parseFloat(price.high24h).toLocaleString()}</span>
+            <span>24h L: {parseFloat(price.low24h).toLocaleString()}</span>
+            <span>Vol: {parseFloat(price.volume24h).toLocaleString()}</span>
+          </div>
+        )}
       </div>
-      <div className="flex-1 relative">
-        <canvas
-          ref={canvasRef}
-          className="absolute inset-0 w-full h-full"
-          style={{ width: '100%', height: '100%' }}
-        />
-      </div>
+      <div ref={chartContainerRef} className="flex-1 w-full" />
     </div>
   );
 }

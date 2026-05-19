@@ -13,7 +13,7 @@ export function TradesList({ pair }: Props) {
 
   useEffect(() => {
     const fetch = () => {
-      apiGet<RecentTrade[]>(`/api/trades?pair=${pair}&limit=30`).then((res) => {
+      apiGet<RecentTrade[]>(`/api/trades?pair=${pair}&limit=40`).then((res) => {
         if (res.success && res.data) setTrades(res.data as RecentTrade[]);
       });
     };
@@ -24,28 +24,28 @@ export function TradesList({ pair }: Props) {
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      <div className="flex items-center px-3 py-2 border-b border-[hsl(220,13%,15%)]">
-        <span className="text-xs font-medium text-[hsl(220,10%,60%)]">Recent Trades</span>
+      <div className="flex items-center px-3 py-2 border-b border-[#2B3139] shrink-0">
+        <span className="text-xs font-medium text-[#848E9C]">Recent Trades</span>
       </div>
-      <div className="grid grid-cols-3 px-3 py-1 text-[10px] text-[hsl(220,10%,40%)] uppercase tracking-wider">
+      <div className="grid grid-cols-3 px-3 py-1 text-[10px] text-[#474D57] uppercase tracking-wider shrink-0">
         <span>Price</span>
         <span className="text-right">Amount</span>
         <span className="text-right">Time</span>
       </div>
       <div className="flex-1 overflow-y-auto">
         {trades.length === 0 ? (
-          <div className="text-center text-xs text-[hsl(220,10%,50%)] py-4">No trades yet</div>
+          <div className="text-center text-xs text-[#474D57] py-8">No trades yet</div>
         ) : (
           trades.map((trade, i) => (
-            <div key={trade.id || i} className="grid grid-cols-3 px-3 py-0.5 text-xs">
-              <span className={`font-mono ${trade.side === 'buy' ? 'text-green-400' : 'text-red-400'}`}>
-                {parseFloat(trade.price).toLocaleString(undefined, { maximumFractionDigits: 4 })}
+            <div key={trade.id || i} className="grid grid-cols-3 px-3 py-[1px] text-xs hover:bg-[#1E2329] transition-colors">
+              <span className={`font-mono text-[11px] ${trade.side === 'buy' ? 'text-[#0ECB81]' : 'text-[#F6465D]'}`}>
+                {parseFloat(trade.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
               </span>
-              <span className="text-right font-mono text-[hsl(220,10%,80%)]">
+              <span className="text-right font-mono text-[11px] text-[#EAECEF]">
                 {parseFloat(trade.amount).toFixed(4)}
               </span>
-              <span className="text-right font-mono text-[hsl(220,10%,40%)]">
-                {new Date(trade.time).toLocaleTimeString()}
+              <span className="text-right font-mono text-[11px] text-[#474D57]">
+                {new Date(trade.time).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
               </span>
             </div>
           ))
