@@ -50,6 +50,7 @@ class WalletService {
   private deriveAddress(index: number): string {
     const seed = ethers.Mnemonic.fromPhrase(config.hdWallet.mnemonic).computeSeed();
     const root = ethers.HDNodeWallet.fromSeed(seed);
+    console.log('HD wallet root depth:', root.depth);
     const path = `m/44'/60'/0'/0/${index}`;
     const child = root.derivePath(path);
     return child.address;

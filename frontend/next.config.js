@@ -1,3 +1,5 @@
+const path = require('path');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -8,6 +10,10 @@ const nextConfig = {
   },
   images: {
     domains: ['lh3.googleusercontent.com', 'avatars.githubusercontent.com'],
+  },
+  webpack: (config) => {
+    config.resolve.alias['@yellowcex/shared'] = path.resolve(__dirname, '../shared/src');
+    return config;
   },
   async rewrites() {
     return [
