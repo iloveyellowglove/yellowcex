@@ -42,22 +42,16 @@ function smallestUnitToDecimal(amount: bigint, currency: Currency): string {
 }
 
 class WalletService {
-  private masterWallet: ethers.HDNodeWallet;
-
-  constructor() {
-    this.masterWallet = ethers.Wallet.fromPhrase(config.hdWallet.mnemonic)!;
-  }
-
   getProvider(currency: Currency): ethers.JsonRpcProvider {
     if (currency === 'BNB') return bscProvider;
     return ethProvider;
   }
 
-  private deriveAddress(userId: string, currency: Currency, index: number): string {
-    const userIdNum = BigInt('0x' + userId.replace(/-/g, '').slice(0, 16));
-    const pathIndex = Number(userIdNum % 1000000n) + index;
-    const path = `m/44'/60'/${pathIndex}'/0/0`;
-    const child = this.masterWallet.derivePath(path);
+  private deriveAddress(index: number): string {
+    const seed = ethers.Mnemonic.fromPhrase(config.hdWallet.mnemonic).computeSeed();
+    const root = ethers.HDNodeWallet.fromSeed(seed);
+    const path = `m/44'/60'/0'/0/${index}`;
+    const child = root.derivePath(path);
     return child.address;
   }
 
@@ -73,11 +67,10 @@ class WalletService {
 
     const { count } = await supabaseAdmin
       .from('wallets')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId);
+      .select('*', { count: 'exact', head: true });
 
     const index = (count ?? 0);
-    const address = this.deriveAddress(userId, currency, index);
+    const address = this.deriveAddress(index);
 
     const { error: wErr } = await supabaseAdmin.from('wallets').insert({
       user_id: userId,
