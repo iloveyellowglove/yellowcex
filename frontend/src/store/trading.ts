@@ -2,7 +2,6 @@
 
 import { create } from 'zustand';
 import type { TradingPair } from '@yellowcex/shared';
-import { TRADING_PAIRS } from '@yellowcex/shared';
 
 interface PriceState {
   prices: Record<string, {

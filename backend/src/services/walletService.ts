@@ -2,8 +2,10 @@ import { ethers } from 'ethers';
 import { config } from '../config';
 import { supabaseAdmin } from '../db/supabase';
 import type { Currency } from '@yellowcex/shared';
+import { CURRENCY_DECIMALS } from '@yellowcex/shared';
 
 const isTestnet = config.network === 'testnet';
+
 const ethProvider = new ethers.JsonRpcProvider(
   isTestnet
     ? process.env.ETH_RPC || 'https://sepolia.infura.io/v3/your-key'
@@ -16,13 +18,34 @@ const bscProvider = new ethers.JsonRpcProvider(
     : 'https://bsc-dataseed.binance.org'
 );
 
-const mnemonic = process.env.HD_WALLET_MNEMONIC || ethers.Wallet.createRandom().mnemonic!.phrase;
+function getDecimals(currency: Currency): number {
+  return CURRENCY_DECIMALS[currency] ?? 18;
+}
+
+function decimalToSmallestUnit(amount: string, currency: Currency): bigint {
+  const decimals = getDecimals(currency);
+  const parts = amount.split('.');
+  const integer = parts[0].replace(/^0+/, '') || '0';
+  const fraction = (parts[1] ?? '').padEnd(decimals, '0').slice(0, decimals);
+  const combined = integer + fraction;
+  return BigInt(combined || '0');
+}
+
+function smallestUnitToDecimal(amount: bigint, currency: Currency): string {
+  const decimals = getDecimals(currency);
+  const isNeg = amount < 0n;
+  const abs = (isNeg ? -amount : amount).toString().padStart(decimals + 1, '0');
+  const integerPart = abs.slice(0, abs.length - decimals);
+  const fractionPart = abs.slice(abs.length - decimals);
+  const decimal = integerPart + '.' + fractionPart;
+  return (isNeg ? '-' : '') + decimal.replace(/\.?0+$/, '').replace(/^0+(?=\d)/, '');
+}
 
 class WalletService {
   private masterWallet: ethers.HDNodeWallet;
 
   constructor() {
-    this.masterWallet = ethers.Wallet.fromPhrase(mnemonic)!;
+    this.masterWallet = ethers.Wallet.fromPhrase(config.hdWallet.mnemonic)!;
   }
 
   getProvider(currency: Currency): ethers.JsonRpcProvider {
@@ -30,35 +53,56 @@ class WalletService {
     return ethProvider;
   }
 
-  async deriveAddress(userId: string, currency: Currency, index: number): Promise<string> {
-    const path = `m/44'/60'/${index}'/0/0`;
+  private deriveAddress(userId: string, currency: Currency, index: number): string {
+    const userIdNum = BigInt('0x' + userId.replace(/-/g, '').slice(0, 16));
+    const pathIndex = Number(userIdNum % 1000000n) + index;
+    const path = `m/44'/60'/${pathIndex}'/0/0`;
     const child = this.masterWallet.derivePath(path);
     return child.address;
   }
 
   async createWallet(userId: string, currency: Currency): Promise<{ address: string }> {
+    const { data: existing } = await supabaseAdmin
+      .from('wallets')
+      .select('address')
+      .eq('user_id', userId)
+      .eq('currency', currency)
+      .single();
+
+    if (existing) return { address: existing.address };
+
     const { count } = await supabaseAdmin
       .from('wallets')
-      .select('*', { count: 'exact', head: true });
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId);
 
     const index = (count ?? 0);
-    const address = await this.deriveAddress(userId, currency, index);
+    const address = this.deriveAddress(userId, currency, index);
 
-    const { error } = await supabaseAdmin.from('wallets').insert({
+    const { error: wErr } = await supabaseAdmin.from('wallets').insert({
       user_id: userId,
       currency,
       address,
       balance: '0',
     });
 
-    if (error) throw new Error(`Failed to create wallet: ${error.message}`);
+    if (wErr) throw new Error(`Failed to create wallet: ${wErr.message}`);
 
-    await supabaseAdmin.from('balances').insert({
-      user_id: userId,
-      currency,
-      available: '0',
-      locked: '0',
-    });
+    const { data: bal } = await supabaseAdmin
+      .from('balances')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('currency', currency)
+      .single();
+
+    if (!bal) {
+      await supabaseAdmin.from('balances').insert({
+        user_id: userId,
+        currency,
+        available: '0',
+        locked: '0',
+      });
+    }
 
     return { address };
   }
@@ -107,17 +151,17 @@ class WalletService {
 
     if (!balance) throw new Error(`No balance record for ${currency}`);
 
-    const available = BigInt(balance.available);
-    const locked = BigInt(balance.locked);
-    const amountBN = BigInt(amount);
+    const available = decimalToSmallestUnit(balance.available, currency as Currency);
+    const locked = decimalToSmallestUnit(balance.locked, currency as Currency);
+    const amountBN = decimalToSmallestUnit(amount, currency as Currency);
 
     if (available < amountBN) throw new Error(`Insufficient ${currency} balance`);
 
     await supabaseAdmin
       .from('balances')
       .update({
-        available: (available - amountBN).toString(),
-        locked: (locked + amountBN).toString(),
+        available: smallestUnitToDecimal(available - amountBN, currency as Currency),
+        locked: smallestUnitToDecimal(locked + amountBN, currency as Currency),
       })
       .eq('user_id', userId)
       .eq('currency', currency);
@@ -133,48 +177,27 @@ class WalletService {
 
     if (!balance) throw new Error(`No balance record for ${currency}`);
 
-    const available = BigInt(balance.available);
-    const locked = BigInt(balance.locked);
-    const amountBN = BigInt(amount);
+    const available = decimalToSmallestUnit(balance.available, currency as Currency);
+    const locked = decimalToSmallestUnit(balance.locked, currency as Currency);
+    const amountBN = decimalToSmallestUnit(amount, currency as Currency);
 
     await supabaseAdmin
       .from('balances')
       .update({
-        available: (available + amountBN).toString(),
-        locked: (locked - amountBN).toString(),
+        available: smallestUnitToDecimal(available + amountBN, currency as Currency),
+        locked: smallestUnitToDecimal(locked - amountBN, currency as Currency),
       })
       .eq('user_id', userId)
       .eq('currency', currency);
   }
 
-  async settleTrade(
-    buyerId: string,
-    sellerId: string,
-    baseCurrency: Currency,
-    quoteCurrency: Currency,
-    amount: string,
-    price: string
-  ): Promise<void> {
-    const totalQuote = ethers.formatEther(
-      ethers.parseEther(amount) * ethers.parseEther(price) / ethers.parseEther('1')
-    );
-
-    // Transfer quote from buyer to seller
-    await this.transferBalance(buyerId, quoteCurrency, totalQuote, 'trade_buy');
-    await this.transferBalance(sellerId, quoteCurrency, totalQuote, 'trade_sell');
-
-    // Transfer base from seller to buyer
-    await this.transferBalance(buyerId, baseCurrency, amount, 'trade_buy');
-    await this.transferBalance(sellerId, baseCurrency, amount, 'trade_sell');
-  }
-
-  private async transferBalance(
+  async transferBalance(
     userId: string,
     currency: string,
     amount: string,
-    direction: 'trade_buy' | 'trade_sell'
+    direction: 'credit' | 'debit'
   ): Promise<void> {
-    const isIncoming = direction === 'trade_buy';
+    const cur = currency as Currency;
     const { data: balance } = await supabaseAdmin
       .from('balances')
       .select('available')
@@ -184,23 +207,50 @@ class WalletService {
 
     if (!balance) throw new Error(`No balance record for ${currency}`);
 
-    const current = BigInt(balance.available);
-    const amountBN = BigInt(amount);
+    const current = decimalToSmallestUnit(balance.available, cur);
+    const amountBN = decimalToSmallestUnit(amount, cur);
 
-    if (!isIncoming && current < amountBN) {
+    if (direction === 'debit' && current < amountBN) {
       throw new Error(`Insufficient balance for settlement`);
     }
 
-    const newBalance = isIncoming ? (current + amountBN).toString() : (current - amountBN).toString();
+    const newBalance = direction === 'credit'
+      ? current + amountBN
+      : current - amountBN;
 
     await supabaseAdmin
       .from('balances')
-      .update({ available: newBalance })
+      .update({ available: smallestUnitToDecimal(newBalance, cur) })
       .eq('user_id', userId)
       .eq('currency', currency);
   }
 
+  async settleTrade(
+    buyerId: string,
+    sellerId: string,
+    baseCurrency: string,
+    quoteCurrency: string,
+    amount: string,
+    price: string
+  ): Promise<void> {
+    const amt = decimalToSmallestUnit(amount, baseCurrency as Currency);
+    const prc = decimalToSmallestUnit(price, quoteCurrency as Currency);
+    const baseDec = getDecimals(baseCurrency as Currency);
+    const quoteDec = getDecimals(quoteCurrency as Currency);
+
+    // totalQuote = amount * price (in quote's smallest units)
+    const totalQuoteBN = (amt * prc) / (10n ** BigInt(baseDec));
+
+    const totalQuoteFormatted = smallestUnitToDecimal(totalQuoteBN, quoteCurrency as Currency);
+
+    await this.transferBalance(buyerId, quoteCurrency, totalQuoteFormatted, 'debit');
+    await this.transferBalance(sellerId, quoteCurrency, totalQuoteFormatted, 'credit');
+    await this.transferBalance(sellerId, baseCurrency, amount, 'debit');
+    await this.transferBalance(buyerId, baseCurrency, amount, 'credit');
+  }
+
   async creditBalance(userId: string, currency: string, amount: string, txType: string): Promise<void> {
+    const cur = currency as Currency;
     const { data: balance } = await supabaseAdmin
       .from('balances')
       .select('available')
@@ -208,13 +258,15 @@ class WalletService {
       .eq('currency', currency)
       .single();
 
-    const current = balance ? BigInt(balance.available) : BigInt(0);
-    const amountBN = BigInt(amount);
+    const current = balance
+      ? decimalToSmallestUnit(balance.available, cur)
+      : 0n;
+    const amountBN = decimalToSmallestUnit(amount, cur);
 
     if (balance) {
       await supabaseAdmin
         .from('balances')
-        .update({ available: (current + amountBN).toString() })
+        .update({ available: smallestUnitToDecimal(current + amountBN, cur) })
         .eq('user_id', userId)
         .eq('currency', currency);
     } else {

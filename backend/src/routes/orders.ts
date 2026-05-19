@@ -4,9 +4,10 @@ import { supabaseAdmin } from '../db/supabase';
 import { authMiddleware } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { orderbookEngine } from '../services/orderbook';
+import { walletService } from '../services/walletService';
 import { wsManager } from '../ws';
-import { TRADING_PAIRS } from '@yellowcex/shared';
-import type { TradingPair } from '@yellowcex/shared';
+import { TRADING_PAIRS, TRADING_PAIR_INFO } from '@yellowcex/shared';
+import type { TradingPair, Currency } from '@yellowcex/shared';
 
 const router = Router();
 
@@ -18,10 +19,6 @@ const createOrderSchema = z.object({
   amount: z.string(),
 });
 
-const cancelOrderSchema = z.object({
-  orderId: z.string(),
-});
-
 // POST /api/orders
 router.post('/', authMiddleware, validate(createOrderSchema), async (req: Request, res: Response) => {
   try {
@@ -29,6 +26,16 @@ router.post('/', authMiddleware, validate(createOrderSchema), async (req: Reques
     const userId = req.user!.userId;
 
     const orderPrice = type === 'market' ? '0' : (price ?? '0');
+    const pairInfo = TRADING_PAIR_INFO[pair as TradingPair];
+
+    // Lock balance before placing order
+    if (side === 'buy' && type === 'limit') {
+      const totalQuote = (parseFloat(amount) * parseFloat(orderPrice)).toString();
+      await walletService.lockBalance(userId, pairInfo.quote, totalQuote);
+    } else if (side === 'sell') {
+      await walletService.lockBalance(userId, pairInfo.base, amount);
+    }
+    // For market buys, balance is checked at settlement time
 
     // Insert into DB
     const { data: order, error } = await supabaseAdmin
@@ -80,9 +87,9 @@ router.post('/', authMiddleware, validate(createOrderSchema), async (req: Reques
     }
 
     res.json({ success: true, data: { order: updatedOrder ?? order, trades } });
-  } catch (err: any) {
-    console.error('Create order error:', err);
-    res.status(500).json({ success: false, error: err.message });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ success: false, error: message });
   }
 });
 
@@ -120,8 +127,9 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
       page,
       limit,
     });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ success: false, error: message });
   }
 });
 
@@ -141,8 +149,9 @@ router.get('/:id', authMiddleware, async (req: Request, res: Response) => {
     }
 
     res.json({ success: true, data: order });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ success: false, error: message });
   }
 });
 
@@ -162,8 +171,9 @@ router.delete('/:id', authMiddleware, async (req: Request, res: Response) => {
     });
 
     res.json({ success: true, message: 'Order cancelled' });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ success: false, error: message });
   }
 });
 
@@ -178,8 +188,9 @@ router.get('/book/:pair', async (req: Request, res: Response) => {
 
     const orderBook = orderbookEngine.getOrderBook(pair);
     res.json({ success: true, data: orderBook });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ success: false, error: message });
   }
 });
 

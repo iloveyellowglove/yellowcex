@@ -2,6 +2,7 @@ import { Server as HttpServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import type { WsMessage, WsEventType, PriceUpdate, OrderbookUpdate } from '@yellowcex/shared';
 import type { TradingPair } from '@yellowcex/shared';
+import { TRADING_PAIRS } from '@yellowcex/shared';
 import jwt from 'jsonwebtoken';
 import { config } from '../config';
 import { binanceFeed } from '../services/binanceFeed';
@@ -16,6 +17,7 @@ interface WsClient {
 class WsManager {
   private wss: WebSocketServer | null = null;
   private clients: Set<WsClient> = new Set();
+  private orderbookInterval: ReturnType<typeof setInterval> | null = null;
 
   init(server: HttpServer): void {
     this.wss = new WebSocketServer({ server, path: '/ws' });
@@ -37,7 +39,6 @@ class WsManager {
       }
 
       this.clients.add(client);
-      console.log('WebSocket client connected, total:', this.clients.size);
 
       ws.on('message', (data: Buffer) => {
         try {
@@ -54,10 +55,9 @@ class WsManager {
 
       ws.on('close', () => {
         this.clients.delete(client);
-        console.log('WebSocket client disconnected, total:', this.clients.size);
       });
 
-      ws.on('error', () => {
+      ws.on('error', (err) => {
         this.clients.delete(client);
       });
     });
@@ -75,10 +75,9 @@ class WsManager {
       } as PriceUpdate);
     });
 
-    // Send order book snapshots periodically
-    setInterval(() => {
-      const pairs = ['BTC/USDT', 'ETH/USDT'] as TradingPair[];
-      for (const pair of pairs) {
+    // Send order book snapshots periodically for all trading pairs
+    this.orderbookInterval = setInterval(() => {
+      for (const pair of TRADING_PAIRS) {
         const ob = orderbookEngine.getOrderBook(pair);
         this.broadcast(pair, 'orderbook_update', {
           pair: ob.pair,
@@ -87,8 +86,17 @@ class WsManager {
         } as OrderbookUpdate);
       }
     }, 1000);
+  }
 
-    console.log('WebSocket server initialized');
+  shutdown(): void {
+    if (this.orderbookInterval) {
+      clearInterval(this.orderbookInterval);
+      this.orderbookInterval = null;
+    }
+    if (this.wss) {
+      this.wss.close();
+      this.wss = null;
+    }
   }
 
   broadcast(pair: string, type: WsEventType, payload: unknown): void {

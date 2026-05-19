@@ -5,10 +5,24 @@ import { getAdminStats } from '../lib/api';
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getAdminStats().then(setStats).catch(console.error);
+    getAdminStats().then(setStats).catch((err: unknown) => {
+      setError(err instanceof Error ? err.message : 'Failed to load stats');
+    });
   }, []);
+
+  if (error) {
+    return (
+      <div>
+        <h2 className="text-2xl font-bold mb-6">Dashboard</h2>
+        <div className="p-4 bg-red-900/20 border border-red-800 rounded-xl">
+          <p className="text-red-400 text-sm">Failed to load dashboard data: {error}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>

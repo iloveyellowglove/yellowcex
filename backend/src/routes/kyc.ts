@@ -4,7 +4,6 @@ import { z } from 'zod';
 import { supabaseAdmin } from '../db/supabase';
 import { authMiddleware } from '../middleware/auth';
 import { validate } from '../middleware/validate';
-import { config } from '../config';
 
 const router = Router();
 
@@ -83,9 +82,9 @@ router.post(
         .eq('id', userId);
 
       res.json({ success: true, data: doc });
-    } catch (err: any) {
-      console.error('KYC submit error:', err);
-      res.status(500).json({ success: false, error: err.message });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      res.status(500).json({ success: false, error: message });
     }
   }
 );
@@ -100,8 +99,9 @@ router.get('/status', authMiddleware, async (req: Request, res: Response) => {
       .order('submitted_at', { ascending: false });
 
     res.json({ success: true, data: docs ?? [] });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ success: false, error: message });
   }
 });
 

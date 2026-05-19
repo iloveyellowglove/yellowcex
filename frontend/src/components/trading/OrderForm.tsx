@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useTradeFormStore, usePriceStore } from '../../store/trading';
 import { useAuth } from '../../lib/auth';
 import { apiPost, apiGet } from '../../lib/api';
-import type { TradingPair, Balance, Order, Trade } from '@yellowcex/shared';
+import type { TradingPair, Balance, Order, Trade, Wallet } from '@yellowcex/shared';
 
 interface Props {
   pair: TradingPair;
@@ -21,7 +21,7 @@ export function OrderForm({ pair }: Props) {
 
   useEffect(() => {
     if (user) {
-      apiGet<{ wallets: any[]; balances: Balance[] }>('/api/wallets').then((res) => {
+      apiGet<{ wallets: Wallet[]; balances: Balance[] }>('/api/wallets').then((res) => {
         if (res.success && res.data) setBalances(res.data.balances);
       });
     }
@@ -40,7 +40,7 @@ export function OrderForm({ pair }: Props) {
     setMessage(null);
 
     try {
-      const body: any = { pair, side: orderSide, type: orderType, amount };
+      const body: { pair: TradingPair; side: 'buy' | 'sell'; type: 'limit' | 'market'; amount: string; price?: string } = { pair, side: orderSide, type: orderType, amount };
       if (orderType === 'limit') body.price = limitPrice;
 
       const res = await apiPost<{ order: Order; trades: Trade[] }>('/api/orders', body);

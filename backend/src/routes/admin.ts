@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
+import { z } from 'zod';
 import { supabaseAdmin } from '../db/supabase';
 import { authMiddleware } from '../middleware/auth';
+import { validate } from '../middleware/validate';
 
 const router = Router();
 
@@ -47,8 +49,9 @@ router.get('/users', adminCheck, async (req: Request, res: Response) => {
       page,
       limit,
     });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ success: false, error: message });
   }
 });
 
@@ -82,8 +85,9 @@ router.get('/users/:id', adminCheck, async (req: Request, res: Response) => {
       success: true,
       data: { user, balances, wallets },
     });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ success: false, error: message });
   }
 });
 
@@ -103,13 +107,19 @@ router.get('/kyc', adminCheck, async (req: Request, res: Response) => {
     }
 
     res.json({ success: true, data });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ success: false, error: message });
   }
 });
 
+const kycReviewSchema = z.object({
+  status: z.enum(['approved', 'rejected']),
+  reviewer_notes: z.string().optional(),
+});
+
 // PUT /api/admin/kyc/:id
-router.put('/kyc/:id', adminCheck, async (req: Request, res: Response) => {
+router.put('/kyc/:id', adminCheck, validate(kycReviewSchema), async (req: Request, res: Response) => {
   try {
     const { status, reviewer_notes } = req.body;
     const { data: doc, error } = await supabaseAdmin
@@ -135,8 +145,9 @@ router.put('/kyc/:id', adminCheck, async (req: Request, res: Response) => {
       .eq('id', doc.user_id);
 
     res.json({ success: true, data: doc });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ success: false, error: message });
   }
 });
 
@@ -170,8 +181,9 @@ router.get('/orders', adminCheck, async (req: Request, res: Response) => {
       page,
       limit,
     });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ success: false, error: message });
   }
 });
 

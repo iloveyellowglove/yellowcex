@@ -7,7 +7,6 @@ import { supabaseAdmin } from '../db/supabase';
 import { authMiddleware } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { walletService } from '../services/walletService';
-import type { Currency } from '@yellowcex/shared';
 import { SUPPORTED_CURRENCIES } from '@yellowcex/shared';
 
 const router = Router();
@@ -81,9 +80,9 @@ router.post('/register', validate(registerSchema), async (req: Request, res: Res
       success: true,
       data: { user, token },
     });
-  } catch (err: any) {
-    console.error('Register error:', err);
-    res.status(500).json({ success: false, error: err.message });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ success: false, error: message });
   }
 });
 
@@ -92,6 +91,18 @@ router.post('/login', validate(loginSchema), async (req: Request, res: Response)
   try {
     const { email, password } = req.body;
 
+    // Verify via Supabase auth first (constant-time for invalid emails)
+    const { data: authData, error: authError } = await supabaseAdmin.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (authError || !authData.user) {
+      res.status(401).json({ success: false, error: 'Invalid email or password' });
+      return;
+    }
+
+    // Fetch user profile from public.users
     const { data: user } = await supabaseAdmin
       .from('users')
       .select('*')
@@ -99,17 +110,6 @@ router.post('/login', validate(loginSchema), async (req: Request, res: Response)
       .single();
 
     if (!user) {
-      res.status(401).json({ success: false, error: 'Invalid email or password' });
-      return;
-    }
-
-    // Verify via Supabase auth
-    const { data: authData, error: authError } = await supabaseAdmin.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (authError || !authData.user) {
       res.status(401).json({ success: false, error: 'Invalid email or password' });
       return;
     }
@@ -122,9 +122,9 @@ router.post('/login', validate(loginSchema), async (req: Request, res: Response)
       success: true,
       data: { user, token },
     });
-  } catch (err: any) {
-    console.error('Login error:', err);
-    res.status(500).json({ success: false, error: err.message });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ success: false, error: message });
   }
 });
 
@@ -186,9 +186,9 @@ router.post('/google', validate(googleAuthSchema), async (req: Request, res: Res
       success: true,
       data: { user, token },
     });
-  } catch (err: any) {
-    console.error('Google auth error:', err);
-    res.status(500).json({ success: false, error: err.message });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ success: false, error: message });
   }
 });
 
@@ -207,13 +207,19 @@ router.get('/me', authMiddleware, async (req: Request, res: Response) => {
     }
 
     res.json({ success: true, data: user });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ success: false, error: message });
   }
 });
 
+const profileSchema = z.object({
+  name: z.string().min(1).optional(),
+  avatar_url: z.string().url().optional(),
+});
+
 // PUT /api/auth/profile
-router.put('/profile', authMiddleware, async (req: Request, res: Response) => {
+router.put('/profile', authMiddleware, validate(profileSchema), async (req: Request, res: Response) => {
   try {
     const updates: Record<string, unknown> = {};
     if (req.body.name) updates.name = req.body.name;
@@ -232,8 +238,9 @@ router.put('/profile', authMiddleware, async (req: Request, res: Response) => {
     }
 
     res.json({ success: true, data: user });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ success: false, error: message });
   }
 });
 

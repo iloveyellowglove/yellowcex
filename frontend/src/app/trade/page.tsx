@@ -11,16 +11,12 @@ import { OrderForm } from '../../components/trading/OrderForm';
 import { TradesList } from '../../components/trading/TradesList';
 import { MarketSelector } from '../../components/trading/MarketSelector';
 import { AccountOverview } from '../../components/trading/AccountOverview';
-import { useTradeFormStore, usePriceStore } from '../../store/trading';
-import type { TradingPair } from '@yellowcex/shared';
-import { TRADING_PAIRS } from '@yellowcex/shared';
-import { apiGet } from '../../lib/api';
+import { useTradeFormStore } from '../../store/trading';
 
 export default function TradePage() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const pair = useTradeFormStore((s) => s.pair);
-  const setPair = useTradeFormStore((s) => s.setPair);
 
   useEffect(() => {
     if (!loading && !user) router.push('/login');

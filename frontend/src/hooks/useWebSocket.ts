@@ -1,22 +1,23 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import type { WsMessage } from '@yellowcex/shared';
+import { useEffect, useRef, useCallback } from 'react';
+import type { WsMessage, TradingPair } from '@yellowcex/shared';
 import { usePriceStore, useOrderBookStore } from '../store/trading';
 import { getWsUrl } from '../lib/api';
 
 export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimer = useRef<ReturnType<typeof setTimeout>>();
   const setPrice = usePriceStore((s) => s.setPrice);
   const setOrderBook = useOrderBookStore((s) => s.setOrderBook);
 
-  useEffect(() => {
+  const connect = useCallback(() => {
     const url = getWsUrl();
     const ws = new WebSocket(url);
     wsRef.current = ws;
 
     ws.onopen = () => {
-      console.log('WebSocket connected');
+      // Connected
     };
 
     ws.onmessage = (event) => {
@@ -24,9 +25,9 @@ export function useWebSocket() {
         const msg: WsMessage = JSON.parse(event.data);
 
         if (msg.type === 'price_update') {
-          const payload = msg.payload as any;
+          const payload = msg.payload as { pair: string; price: string; change24h: string; changePercent24h: string; high24h: string; low24h: string; volume24h: string };
           if (payload.pair && payload.price) {
-            setPrice(payload.pair, {
+            setPrice(payload.pair as TradingPair, {
               price: payload.price,
               change24h: payload.change24h || '0',
               changePercent24h: payload.changePercent24h || '0',
@@ -36,29 +37,33 @@ export function useWebSocket() {
             });
           }
         } else if (msg.type === 'orderbook_update') {
-          const payload = msg.payload as any;
+          const payload = msg.payload as { bids: [string, string][]; asks: [string, string][] };
           if (payload.bids && payload.asks) {
             setOrderBook(payload.bids, payload.asks);
           }
         }
       } catch {
-        // Ignore
+        // Ignore malformed messages
       }
     };
 
     ws.onclose = () => {
-      console.log('WebSocket disconnected, reconnecting in 3s...');
-      setTimeout(() => {
+      // Reconnect after 3 seconds
+      reconnectTimer.current = setTimeout(() => {
         if (wsRef.current?.readyState === WebSocket.CLOSED) {
-          // Reconnect
+          connect();
         }
       }, 3000);
     };
-
-    return () => {
-      ws.close();
-    };
   }, [setPrice, setOrderBook]);
+
+  useEffect(() => {
+    connect();
+    return () => {
+      if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+      wsRef.current?.close();
+    };
+  }, [connect]);
 
   return wsRef;
 }

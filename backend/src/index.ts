@@ -16,6 +16,16 @@ import tradeRoutes from './routes/trades';
 import adminRoutes from './routes/admin';
 import { errorHandler } from './middleware/errorHandler';
 
+const log = {
+  info: (msg: string, data?: Record<string, unknown>) => {
+    process.stdout.write(JSON.stringify({ level: 'info', ts: new Date().toISOString(), msg, ...data }) + '\n');
+  },
+  error: (msg: string, err?: unknown) => {
+    const extra = err instanceof Error ? { error: err.message, stack: err.stack } : {};
+    process.stderr.write(JSON.stringify({ level: 'error', ts: new Date().toISOString(), msg, ...extra }) + '\n');
+  },
+};
+
 const app = express();
 const server = http.createServer(app);
 
@@ -24,14 +34,14 @@ app.use(helmet());
 app.use(cors({ origin: config.cors.origin, credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 
-// Rate limiting
+// Rate limiting — apply to /api/ paths
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
   standardHeaders: true,
   legacyHeaders: false,
 });
-app.use('/api/', limiter);
+app.use('/api', limiter);
 
 // Auth rate limit (stricter)
 const authLimiter = rateLimit({
@@ -74,28 +84,23 @@ async function start(): Promise<void> {
 
     // Start server
     server.listen(config.port, () => {
-      console.log(`YellowCEX API running on port ${config.port}`);
-      console.log(`Environment: ${config.nodeEnv}`);
-      console.log(`Network: ${config.network}`);
+      log.info('Server started', { port: config.port, env: config.nodeEnv, network: config.network });
     });
   } catch (err) {
-    console.error('Failed to start server:', err);
+    log.error('Failed to start server', err);
     process.exit(1);
   }
 }
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received, shutting down...');
+function shutdown(signal: string): void {
+  log.info('Shutdown signal received', { signal });
   binanceFeed.disconnect();
+  wsManager.shutdown();
   server.close(() => process.exit(0));
-});
+}
 
-process.on('SIGINT', () => {
-  console.log('SIGINT received, shutting down...');
-  binanceFeed.disconnect();
-  server.close(() => process.exit(0));
-});
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 start();
 

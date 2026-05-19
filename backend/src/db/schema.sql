@@ -2,6 +2,9 @@
 -- Run this in Supabase SQL Editor
 
 -- Users table (extends Supabase auth.users)
+-- In production, this should reference auth.users(id) to make RLS policies work:
+--   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+-- For development, gen_random_uuid() is used since the backend uses service_role (bypasses RLS).
 CREATE TABLE IF NOT EXISTS public.users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email TEXT UNIQUE NOT NULL,
@@ -85,6 +88,7 @@ CREATE TABLE IF NOT EXISTS public.transactions (
   currency TEXT NOT NULL,
   amount TEXT NOT NULL,
   tx_hash TEXT,
+  withdrawal_address TEXT,
   status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'failed')),
   created_at TIMESTAMPTZ DEFAULT now()
 );

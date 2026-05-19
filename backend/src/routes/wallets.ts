@@ -26,8 +26,9 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
         balances,
       },
     });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ success: false, error: message });
   }
 });
 
@@ -43,8 +44,9 @@ router.get('/:currency/address', authMiddleware, async (req: Request, res: Respo
 
     const address = await walletService.getOrCreateWallet(req.user!.userId, currency);
     res.json({ success: true, data: { currency, address } });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ success: false, error: message });
   }
 });
 
@@ -60,8 +62,9 @@ router.get('/:currency/balance', authMiddleware, async (req: Request, res: Respo
 
     const balance = await walletService.getBalance(req.user!.userId, currency);
     res.json({ success: true, data: { currency, ...balance } });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ success: false, error: message });
   }
 });
 
@@ -77,42 +80,36 @@ router.post('/withdraw', authMiddleware, validate(withdrawSchema), async (req: R
     const { currency, amount, toAddress } = req.body;
     const userId = req.user!.userId;
 
-    // Check balance
-    const balance = await walletService.getBalance(userId, currency);
-    if (BigInt(balance.available) < BigInt(amount)) {
-      res.status(400).json({ success: false, error: 'Insufficient balance' });
+    // Require KYC approval for withdrawals
+    const { data: user } = await supabaseAdmin
+      .from('users')
+      .select('kyc_status')
+      .eq('id', userId)
+      .single();
+
+    if (!user || user.kyc_status !== 'approved') {
+      res.status(403).json({ success: false, error: 'KYC approval required for withdrawals' });
       return;
     }
 
-    // Deduct balance
-    const { error } = await supabaseAdmin
-      .from('balances')
-      .select('available')
-      .eq('user_id', userId)
-      .eq('currency', currency)
-      .single();
+    // Use walletService to deduct balance (with proper integer arithmetic)
+    const cur = currency as Currency;
+    await walletService.lockBalance(userId, cur, amount);
 
-    // Create withdrawal transaction
+    // Create withdrawal transaction (tx_hash is the withdrawal address for pending withdrawals)
     await supabaseAdmin.from('transactions').insert({
       user_id: userId,
       type: 'withdrawal',
       currency,
       amount,
-      tx_hash: toAddress, // Store withdrawal address
+      withdrawal_address: toAddress,
       status: 'pending',
     });
 
-    // Deduct from balance
-    const currentAvailable = BigInt(balance.available);
-    await supabaseAdmin
-      .from('balances')
-      .update({ available: (currentAvailable - BigInt(amount)).toString() })
-      .eq('user_id', userId)
-      .eq('currency', currency);
-
     res.json({ success: true, message: 'Withdrawal initiated' });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ success: false, error: message });
   }
 });
 
@@ -137,8 +134,9 @@ router.get('/transactions', authMiddleware, async (req: Request, res: Response) 
       page,
       limit,
     });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ success: false, error: message });
   }
 });
 

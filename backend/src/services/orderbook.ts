@@ -185,6 +185,16 @@ class OrderBookEngine {
 
       if (!buyOrder || !sellOrder) return;
 
+      // Transfer balances between buyer and seller
+      await walletService.settleTrade(
+        buyOrder.userId,
+        sellOrder.userId,
+        pairInfo.base,
+        pairInfo.quote,
+        trade.amount,
+        trade.price,
+      );
+
       // Persist trade to DB
       await supabaseAdmin.from('trades').insert({
         id: trade.id,
@@ -228,23 +238,28 @@ class OrderBookEngine {
   }
 
   async cancelOrder(orderId: string, userId: string): Promise<boolean> {
-    for (const [, orders] of this.bids) {
-      const order = orders.find((o) => o.id === orderId && o.userId === userId);
-      if (order && (order.status === 'open' || order.status === 'partial')) {
-        order.status = 'cancelled';
-        await supabaseAdmin.from('orders').update({ status: 'cancelled', updated_at: new Date().toISOString() }).eq('id', orderId);
-        return true;
+    const order = this.findOrderById(orderId);
+    if (!order || order.userId !== userId) return false;
+    if (order.status !== 'open' && order.status !== 'partial') return false;
+
+    order.status = 'cancelled';
+    await supabaseAdmin.from('orders').update({ status: 'cancelled', updated_at: new Date().toISOString() }).eq('id', orderId);
+
+    // Unlock remaining balance
+    const pairInfo = TRADING_PAIR_INFO[order.pair];
+    if (pairInfo) {
+      const remaining = (parseFloat(order.amount) - parseFloat(order.filled)).toString();
+      if (parseFloat(remaining) > 0) {
+        if (order.side === 'buy') {
+          const lockedQuote = (parseFloat(remaining) * parseFloat(order.price)).toString();
+          await walletService.unlockBalance(userId, pairInfo.quote, lockedQuote);
+        } else {
+          await walletService.unlockBalance(userId, pairInfo.base, remaining);
+        }
       }
     }
-    for (const [, orders] of this.asks) {
-      const order = orders.find((o) => o.id === orderId && o.userId === userId);
-      if (order && (order.status === 'open' || order.status === 'partial')) {
-        order.status = 'cancelled';
-        await supabaseAdmin.from('orders').update({ status: 'cancelled', updated_at: new Date().toISOString() }).eq('id', orderId);
-        return true;
-      }
-    }
-    return false;
+
+    return true;
   }
 
   async loadOpenOrders(): Promise<void> {
