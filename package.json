@@ -1,0 +1,17 @@
+{
+  "name": "yellowcex",
+  "version": "1.0.0",
+  "private": true,
+  "description": "YellowCEX - Full-stack cryptocurrency exchange",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\" \"npm run dev:admin\"",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:admin": "cd admin && npm run dev",
+    "build": "cd shared && npm run typecheck && cd ../backend && npm run build && cd ../frontend && npm run build && cd ../admin && npm run build",
+    "lint": "cd backend && npm run lint"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

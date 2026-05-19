@@ -1,0 +1,69 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-brand: 38 92% 50%;
+    --color-brand-foreground: 0 0% 100%;
+    --color-background: 220 13% 7%;
+    --color-foreground: 0 0% 95%;
+    --color-card: 220 15% 11%;
+    --color-card-foreground: 0 0% 95%;
+    --color-border: 220 13% 18%;
+    --color-muted: 220 13% 16%;
+    --color-muted-foreground: 220 10% 60%;
+    --color-positive: 147 76% 42%;
+    --color-negative: 0 76% 54%;
+    --color-accent: 38 92% 50%;
+  }
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  background-color: hsl(220 13% 7%);
+  color: hsl(0 0% 95%);
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: hsl(220 13% 12%);
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(220 13% 22%);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(220 13% 32%);
+}
+
+/* Number input hide arrows */
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type='number'] {
+  -moz-appearance: textfield;
+}
+
+@layer utilities {
+  .text-positive { color: hsl(147 76% 42%); }
+  .text-negative { color: hsl(0 76% 54%); }
+  .bg-positive { background-color: hsl(147 76% 42%); }
+  .bg-negative { background-color: hsl(0 76% 54%); }
+  .text-brand { color: hsl(38 92% 50%); }
+  .bg-brand { background-color: hsl(38 92% 50%); }
+  .border-brand { border-color: hsl(38 92% 50%); }
+}
