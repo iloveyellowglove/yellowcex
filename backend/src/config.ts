@@ -33,7 +33,7 @@ export const config = {
   },
 
   binance: {
-    wsUrl: process.env.BINANCE_WS_URL || 'wss://testnet.binance.vision/ws',
+    wsUrl: process.env.BINANCE_WS_URL || 'wss://stream.testnet.binance.vision:9443/ws',
     restUrl: process.env.BINANCE_REST_URL || 'https://testnet.binance.vision',
     isTestnet: !process.env.NETWORK || process.env.NETWORK === 'testnet',
   },
