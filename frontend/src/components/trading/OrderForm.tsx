@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useTradeFormStore, usePriceStore } from '../../store/trading';
 import { useAuth } from '../../lib/auth';
 import { apiPost, apiGet } from '../../lib/api';
-import type { TradingPair, Balance, Order, Trade, Wallet } from '@yellowcex/shared';
+import type { TradingPair, Balance, Order, Trade, Wallet } from '@/types/shared';
 
 interface Props {
   pair: TradingPair;

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '../../lib/auth';
 import { Header } from '../../components/layout/Header';
 import { apiUpload, apiGet } from '../../lib/api';
-import type { KycDocument } from '@yellowcex/shared';
+import type { KycDocument } from '@/types/shared';
 
 export default function KycPage() {
   const { user, loading } = useAuth();

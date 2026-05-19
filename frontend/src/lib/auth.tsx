@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { apiPost, apiGet } from './api';
-import type { User } from '@yellowcex/shared';
+import type { User } from '@/types/shared';
 
 interface AuthContextType {
   user: User | null;

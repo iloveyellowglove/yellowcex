@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useCallback } from 'react';
-import type { WsMessage, TradingPair } from '@yellowcex/shared';
+import type { WsMessage, TradingPair } from '@/types/shared';
 import { usePriceStore, useOrderBookStore } from '../store/trading';
 import { getWsUrl } from '../lib/api';
 

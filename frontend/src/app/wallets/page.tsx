@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '../../lib/auth';
 import { Header } from '../../components/layout/Header';
 import { apiGet } from '../../lib/api';
-import type { Wallet, Balance } from '@yellowcex/shared';
+import type { Wallet, Balance } from '@/types/shared';
 
 export default function WalletsPage() {
   const { user, loading } = useAuth();

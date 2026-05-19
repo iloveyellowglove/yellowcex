@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '../../lib/auth';
 import { Header } from '../../components/layout/Header';
 import { apiPut } from '../../lib/api';
-import type { User } from '@yellowcex/shared';
+import type { User } from '@/types/shared';
 
 export default function ProfilePage() {
   const { user, loading, updateUser } = useAuth();

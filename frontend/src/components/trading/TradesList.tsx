@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { apiGet } from '../../lib/api';
-import type { TradingPair, RecentTrade } from '@yellowcex/shared';
+import type { TradingPair, RecentTrade } from '@/types/shared';
 
 interface Props {
   pair: TradingPair;

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '../../lib/auth';
 import { Header } from '../../components/layout/Header';
 import { apiGet, apiDelete } from '../../lib/api';
-import type { Order, OrderStatus } from '@yellowcex/shared';
+import type { Order, OrderStatus } from '@/types/shared';
 
 export default function OrdersPage() {
   const { user, loading } = useAuth();

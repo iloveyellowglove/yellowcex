@@ -2,8 +2,8 @@
 
 import React from 'react';
 import { useTradeFormStore } from '../../store/trading';
-import type { TradingPair } from '@yellowcex/shared';
-import { TRADING_PAIRS } from '@yellowcex/shared';
+import type { TradingPair } from '@/types/shared';
+import { TRADING_PAIRS } from '@/types/shared';
 
 const PAIR_GROUPS = [
   { label: 'USDT Markets', pairs: TRADING_PAIRS.filter((p) => p.endsWith('/USDT')) },

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import { usePriceStore } from '../../store/trading';
-import type { TradingPair } from '@yellowcex/shared';
+import type { TradingPair } from '@/types/shared';
 
 interface Props {
   pair: TradingPair;

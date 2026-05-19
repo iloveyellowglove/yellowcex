@@ -1,4 +1,4 @@
-import type { ApiResponse } from '@yellowcex/shared';
+import type { ApiResponse } from '@/types/shared';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 

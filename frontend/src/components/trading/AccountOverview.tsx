@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../lib/auth';
 import { apiGet } from '../../lib/api';
-import type { Balance } from '@yellowcex/shared';
+import type { Balance } from '@/types/shared';
 
 export function AccountOverview() {
   const { user } = useAuth();
