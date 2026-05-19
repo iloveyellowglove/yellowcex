@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import WebSocket from 'ws';
 import { config } from '../config';
 
 export const supabase = createClient(
@@ -8,6 +9,10 @@ export const supabase = createClient(
     auth: {
       autoRefreshToken: false,
       persistSession: false,
+    },
+    realtime: {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      transport: WebSocket as any,
     },
   }
 );
