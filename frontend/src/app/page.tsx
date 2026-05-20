@@ -12,7 +12,7 @@ import { TRADING_PAIRS, type TradingPair } from '@/types/shared';
 /* ── Helpers ─────────────────────────────────────────────────── */
 
 const CRYPTO_SYMBOL: Record<string, string> = {
-  BTC: '₿', ETH: 'Ξ', BNB: '🟡', SOL: '◎', XRP: '✕', ADA: '⬡', DOGE: 'Ð', MATIC: '⟠',
+  BTC: '₿', ETH: 'Ξ', BNB: '🟡', SOL: '◎', XRP: '✕', ADA: '⬡', DOGE: 'Ð',
 };
 
 function cryptoIcon(pair: string): string {
@@ -25,9 +25,9 @@ function formatPriceDisplay(pair: TradingPair, price: string | undefined): strin
   const n = parseFloat(price);
   if (!n) return '—';
   if (pair === 'DOGE/USDT') return n.toFixed(5);
-  if (pair === 'BTC/ETH') return n.toFixed(6);
+  if (pair === 'BNB/BTC') return n.toFixed(6);
   if (pair.endsWith('/USDT')) return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return n.toFixed(4);
+  return n.toFixed(6);
 }
 
 /* ── Count-up hook ───────────────────────────────────────────── */
@@ -107,65 +107,39 @@ function Sparkline({ points }: { points: number[] }) {
   );
 }
 
-/* ── Animated cycling price card ──────────────────────────────── */
+/* ── BTC price card ───────────────────────────────────────────── */
 
 function LivePriceCard() {
-  const prices = usePriceStore((s) => s.prices);
-  const [index, setIndex] = useState(0);
-  const [visible, setVisible] = useState(true);
+  const data = usePriceStore((s) => s.prices['BTC/USDT']);
   const [sparkPoints, setSparkPoints] = useState<number[]>([]);
-  const sparkSeed = useRef(0);
 
-  const pair = TRADING_PAIRS[index];
-  const data = prices[pair];
+  useEffect(() => {
+    const base = data?.price ? parseFloat(data.price) : 76000;
+    const pts: number[] = [];
+    let cur = base * 0.96;
+    for (let i = 0; i < 20; i++) {
+      cur += (Math.random() - 0.42) * (base * 0.006);
+      if (cur < base * 0.94) cur = base * 0.94;
+      pts.push(cur);
+    }
+    setSparkPoints(pts);
+  }, []);
+
   const price = data?.price;
   const change = data ? parseFloat(data.changePercent24h) : 0;
   const isPositive = change >= 0;
 
-  // Cycle pairs every 3 seconds
-  useEffect(() => {
-    const id = setInterval(() => {
-      setVisible(false);
-      setTimeout(() => {
-        setIndex((i) => (i + 1) % TRADING_PAIRS.length);
-        setVisible(true);
-      }, 300);
-    }, 3000);
-    return () => clearInterval(id);
-  }, []);
-
-  // Regenerate sparkline when pair changes
-  useEffect(() => {
-    const base = price ? parseFloat(price) : 100;
-    const pts: number[] = [];
-    sparkSeed.current += 1;
-    // Seeded pseudo-random so each pair looks different
-    let cur = base * (0.92 + (sparkSeed.current % 7) * 0.02);
-    for (let i = 0; i < 20; i++) {
-      const seed = (sparkSeed.current * 17 + i * 31) % 100;
-      cur += (seed / 100 - 0.45) * (base * 0.015);
-      if (cur < base * 0.85) cur = base * 0.85;
-      pts.push(cur);
-    }
-    setSparkPoints(pts);
-  }, [pair, price]);
-
-  const base = pair.split('/')[0];
-
   return (
-    <div
-      className="bg-[#1E2329]/90 backdrop-blur border border-[#2B3139] rounded-xl p-5 w-[260px] shadow-2xl animate-float transition-opacity duration-300"
-      style={{ opacity: visible ? 1 : 0 }}
-    >
+    <div className="bg-[#1E2329]/90 backdrop-blur border border-[#2B3139] rounded-xl p-5 w-[260px] shadow-2xl animate-float">
       <div className="flex items-center gap-2 mb-3">
-        <span className="text-lg">{cryptoIcon(pair)}</span>
-        <span className="text-sm font-semibold text-white">{pair}</span>
-        <span className={`text-[11px] font-medium ml-auto px-1.5 py-0.5 rounded transition-colors ${isPositive ? 'text-[#0ECB81] bg-[#0ECB81]/10' : 'text-[#F6465D] bg-[#F6465D]/10'}`}>
+        <span className="text-lg">₿</span>
+        <span className="text-sm font-semibold text-white">BTC / USDT</span>
+        <span className={`text-[11px] font-medium ml-auto px-1.5 py-0.5 rounded ${isPositive ? 'text-[#0ECB81] bg-[#0ECB81]/10' : 'text-[#F6465D] bg-[#F6465D]/10'}`}>
           {data ? `${isPositive ? '+' : ''}${change.toFixed(2)}%` : '—'}
         </span>
       </div>
       <div className="text-2xl font-bold text-white font-mono mb-2 tracking-tight">
-        {price ? `$${formatPriceDisplay(pair, price)}` : (
+        {price ? `$${parseFloat(price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : (
           <span className="inline-block w-28 h-7 bg-[#2B3139] rounded animate-pulse align-middle" />
         )}
       </div>
@@ -457,7 +431,10 @@ export default function HomePage() {
           <CountUpStat value={120000} label="Registered Users" />
           <CountUpStat value={2400} label="24h Volume" suffix="M+" />
           <CountUpStat value={9} label="Trading Pairs" />
-          <CountUpStat value={99} label="Uptime" suffix=".99%" decimals={2} />
+          <div className="text-center">
+            <div className="text-3xl md:text-4xl font-bold text-white mb-1 tabular-nums">99.99%</div>
+            <div className="text-xs text-[#848E9C] uppercase tracking-widest">Uptime</div>
+          </div>
         </div>
       </section>
 

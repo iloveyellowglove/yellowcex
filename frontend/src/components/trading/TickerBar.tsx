@@ -9,9 +9,8 @@ function formatPrice(pair: TradingPair, price: string): string {
   const num = parseFloat(price);
   if (!num) return '—';
   if (pair === 'DOGE/USDT') return num.toFixed(5);
-  if (pair === 'BTC/ETH') return num.toFixed(6);
   if (pair.endsWith('/USDT')) return num.toFixed(2);
-  return num.toFixed(4);
+  return num.toFixed(6);
 }
 
 export function TickerBar({ compact }: { compact?: boolean }) {

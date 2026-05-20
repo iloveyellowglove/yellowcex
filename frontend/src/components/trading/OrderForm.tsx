@@ -54,7 +54,7 @@ export function OrderForm({ pair }: Props) {
   const handlePercent = (pct: number) => {
     const max = parseFloat(maxAmount);
     if (max > 0) {
-      setAmount((max * pct).toFixed(pair === 'DOGE/USDT' ? 2 : pair === 'BTC/ETH' ? 6 : 4));
+      setAmount((max * pct).toFixed(pair === 'DOGE/USDT' ? 2 : pair.endsWith('/BTC') ? 6 : 4));
     }
   };
 
