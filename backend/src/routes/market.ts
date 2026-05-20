@@ -83,4 +83,34 @@ router.get('/ticker/24hr', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/market/depth?symbol=BTCUSDT&limit=20
+// Proxies Binance order book depth (REST)
+router.get('/depth', async (req: Request, res: Response) => {
+  try {
+    const symbol = (req.query.symbol as string) || 'BTCUSDT';
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+
+    const url = `${config.binance.restUrl}/api/v3/depth?symbol=${symbol.toUpperCase()}&limit=${limit}`;
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      res.status(502).json({ success: false, error: `Binance API error: ${response.status}` });
+      return;
+    }
+
+    const data = await response.json() as { bids: string[][]; asks: string[][] };
+
+    res.json({
+      success: true,
+      data: {
+        bids: data.bids.map((b) => [b[0], b[1]] as [string, string]),
+        asks: data.asks.map((a) => [a[0], a[1]] as [string, string]),
+      },
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ success: false, error: message });
+  }
+});
+
 export default router;

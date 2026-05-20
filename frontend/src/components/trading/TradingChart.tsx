@@ -1,21 +1,12 @@
 'use client';
 
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { createChart, ColorType, type IChartApi, type ISeriesApi, type CandlestickData, type Time } from 'lightweight-charts';
 import { usePriceStore } from '../../store/trading';
 import { PAIR_TO_BINANCE_SYMBOL, type TradingPair } from '@/types/shared';
 
 interface Props {
   pair: TradingPair;
-}
-
-interface CandleData {
-  t: number; // time in seconds
-  o: string;
-  h: string;
-  l: string;
-  c: string;
-  v: string;
 }
 
 function binanceSymbol(pair: TradingPair): string {
@@ -27,7 +18,7 @@ export function TradingChart({ pair }: Props) {
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const currentCandleRef = useRef<CandlestickData | null>(null);
-  const lastPriceRef = useRef<number>(0);
+  const candleDataRef = useRef<CandlestickData[]>([]);
   const pairRef = useRef(pair);
   pairRef.current = pair;
 
@@ -36,9 +27,10 @@ export function TradingChart({ pair }: Props) {
 
   // Initialize chart
   useEffect(() => {
-    if (!chartContainerRef.current) return;
+    const container = chartContainerRef.current;
+    if (!container) return;
 
-    const chart = createChart(chartContainerRef.current, {
+    const chart = createChart(container, {
       layout: {
         background: { type: ColorType.Solid, color: '#0B0E11' },
         textColor: '#848E9C',
@@ -70,10 +62,9 @@ export function TradingChart({ pair }: Props) {
         borderColor: '#2B3139',
         timeVisible: true,
         secondsVisible: false,
-        fixLeftEdge: true,
       },
-      width: chartContainerRef.current.clientWidth,
-      height: chartContainerRef.current.clientHeight,
+      width: container.clientWidth || 400,
+      height: container.clientHeight || 300,
     });
 
     const candleSeries = chart.addCandlestickSeries({
@@ -88,19 +79,19 @@ export function TradingChart({ pair }: Props) {
     chartRef.current = chart;
     seriesRef.current = candleSeries;
 
-    const handleResize = () => {
-      if (chartContainerRef.current && chartRef.current) {
-        chartRef.current.applyOptions({
-          width: chartContainerRef.current.clientWidth,
-          height: chartContainerRef.current.clientHeight,
-        });
+    // ResizeObserver for proper container sizing
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0 && chartRef.current) {
+          chartRef.current.applyOptions({ width, height });
+        }
       }
-    };
-
-    window.addEventListener('resize', handleResize);
+    });
+    ro.observe(container);
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      ro.disconnect();
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
@@ -109,85 +100,105 @@ export function TradingChart({ pair }: Props) {
   }, []);
 
   // Fetch historical klines on pair change
-  const fetchAndSetCandles = useCallback(async (fetchPair: TradingPair) => {
+  useEffect(() => {
     const series = seriesRef.current;
     if (!series) return;
 
-    const symbol = binanceSymbol(fetchPair);
-    currentCandleRef.current = null;
+    let cancelled = false;
 
-    try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/market/candles?symbol=${symbol}&interval=1m&limit=300`
-      );
-      const json = await res.json();
-      if (!json.success || !Array.isArray(json.data)) return;
+    async function fetchKlines(fetchPair: TradingPair) {
+      const symbol = binanceSymbol(fetchPair);
+      currentCandleRef.current = null;
+      candleDataRef.current = [];
 
-      const candles: CandleData[] = json.data;
+      try {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/market/candles?symbol=${symbol}&interval=1m&limit=300`
+        );
+        const json = await res.json();
+        if (cancelled || !json.success || !Array.isArray(json.data)) return;
 
-      const data: CandlestickData[] = candles.map((c) => ({
-        time: c.t as Time,
-        open: parseFloat(c.o),
-        high: parseFloat(c.h),
-        low: parseFloat(c.l),
-        close: parseFloat(c.c),
-      }));
+        const raw = json.data as { t: number; o: string; h: string; l: string; c: string; v: string }[];
 
-      if (data.length > 0) {
-        lastPriceRef.current = parseFloat(candles[candles.length - 1].c);
-        series.setData(data);
+        // Convert to lightweight-charts format, deduplicate by time, sort ascending
+        const seen = new Set<number>();
+        const data: CandlestickData[] = [];
+
+        for (const c of raw) {
+          const t = typeof c.t === 'number' ? c.t : Math.floor(Number(c.t));
+          if (seen.has(t)) continue;
+          seen.add(t);
+
+          const open = parseFloat(c.o);
+          const high = parseFloat(c.h);
+          const low = parseFloat(c.l);
+          const close = parseFloat(c.c);
+
+          if (isNaN(open) || isNaN(high) || isNaN(low) || isNaN(close)) continue;
+
+          data.push({ time: t as Time, open, high, low, close });
+        }
+
+        if (data.length > 0) {
+          data.sort((a, b) => (a.time as number) - (b.time as number));
+          candleDataRef.current = data;
+          series.setData(data);
+
+          // Fit content
+          chartRef.current?.timeScale().fitContent();
+        }
+      } catch {
+        // Silently fail
       }
-    } catch {
-      // Silently fail — candle data will populate on next successful fetch
     }
-  }, []);
 
-  useEffect(() => {
-    fetchAndSetCandles(pair);
-  }, [pair, fetchAndSetCandles]);
+    fetchKlines(pair);
 
-  // Update current candle from live WebSocket price
+    return () => {
+      cancelled = true;
+    };
+  }, [pair]);
+
+  // Update current candle from live WebSocket price ticks
   useEffect(() => {
     if (!currentPrice || !seriesRef.current) return;
 
     const priceVal = parseFloat(currentPrice);
     if (!priceVal || priceVal <= 0) return;
 
-    const now = Math.floor(Date.now() / 1000) as Time;
-    const candleTime = (Math.floor(Number(now) / 60) * 60) as Time; // 1-min candle boundary
-
     const series = seriesRef.current;
+    const now = Math.floor(Date.now() / 1000) as Time;
+    const candleTime = (Math.floor(Number(now) / 60) * 60) as Time;
+
     let current = currentCandleRef.current;
 
+    // Check if we need a new candle (crossed minute boundary)
     if (!current || current.time !== candleTime) {
-      // If we have a previous candle, finalize it
-      if (current && pairRef.current === pair) {
-        // Update the series with closed candle
-      }
-
-      // Start new candle — open from previous close
-      const open = current ? current.close : lastPriceRef.current || priceVal;
+      const open = current ? current.close : priceVal;
 
       current = {
         time: candleTime,
         open,
-        high: priceVal > open ? priceVal : open,
-        low: priceVal < open ? priceVal : open,
+        high: Math.max(open, priceVal),
+        low: Math.min(open, priceVal),
         close: priceVal,
       };
+
       currentCandleRef.current = current;
+      // Append the closed candle to stored data
+      if (currentCandleRef.current && current.time !== candleTime) {
+        candleDataRef.current.push(current);
+      }
     } else {
-      // Update current candle OHLC
+      // Mutate the current candle object in place
       if (priceVal > current.high) current.high = priceVal;
       if (priceVal < current.low) current.low = priceVal;
       current.close = priceVal;
     }
 
-    lastPriceRef.current = priceVal;
-
-    // Update the chart with the live candle
-    series.update(current);
-  }, [currentPrice, pair]);
+    // Update chart — lightweight-charts copies values on update()
+    series.update({ ...current });
+  }, [currentPrice]);
 
   return (
     <div className="h-full flex flex-col">
@@ -208,7 +219,7 @@ export function TradingChart({ pair }: Props) {
           </div>
         )}
       </div>
-      <div ref={chartContainerRef} className="flex-1 w-full" />
+      <div ref={chartContainerRef} className="flex-1 w-full min-h-0" />
     </div>
   );
 }
