@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createChart, ColorType, type IChartApi, type ISeriesApi, type CandlestickData, type Time } from 'lightweight-charts';
 import { usePriceStore } from '../../store/trading';
 import { PAIR_TO_BINANCE_SYMBOL, type TradingPair } from '@/types/shared';
@@ -9,11 +9,25 @@ interface Props {
   pair: TradingPair;
 }
 
+type Timeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1d';
+
+const TIMEFRAMES: { label: Timeframe; interval: string; seconds: number }[] = [
+  { label: '1m', interval: '1m', seconds: 60 },
+  { label: '5m', interval: '5m', seconds: 300 },
+  { label: '15m', interval: '15m', seconds: 900 },
+  { label: '1h', interval: '1h', seconds: 3600 },
+  { label: '4h', interval: '4h', seconds: 14400 },
+  { label: '1d', interval: '1d', seconds: 86400 },
+];
+
 function binanceSymbol(pair: TradingPair): string {
   return PAIR_TO_BINANCE_SYMBOL[pair] || pair.replace('/', '').toLowerCase();
 }
 
 export function TradingChart({ pair }: Props) {
+  const [timeframe, setTimeframe] = useState<Timeframe>('1m');
+  const timeframeRef = useRef(timeframe);
+  timeframeRef.current = timeframe;
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -113,7 +127,7 @@ export function TradingChart({ pair }: Props) {
 
       try {
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/market/candles?symbol=${symbol}&interval=1m&limit=300`
+          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/market/candles?symbol=${symbol}&interval=${timeframeRef.current}&limit=300`
         );
         const json = await res.json();
         if (cancelled || !json.success || !Array.isArray(json.data)) return;
@@ -142,7 +156,7 @@ export function TradingChart({ pair }: Props) {
         if (data.length > 0) {
           data.sort((a, b) => (a.time as number) - (b.time as number));
           candleDataRef.current = data;
-          series.setData(data);
+          seriesRef.current?.setData(data);
 
           // Fit content
           chartRef.current?.timeScale().fitContent();
@@ -157,7 +171,7 @@ export function TradingChart({ pair }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [pair]);
+  }, [pair, timeframe]);
 
   // Update current candle from live WebSocket price ticks
   useEffect(() => {
@@ -167,8 +181,9 @@ export function TradingChart({ pair }: Props) {
     if (!priceVal || priceVal <= 0) return;
 
     const series = seriesRef.current;
+    const tfSeconds = TIMEFRAMES.find((t) => t.label === timeframeRef.current)?.seconds ?? 60;
     const now = Math.floor(Date.now() / 1000) as Time;
-    const candleTime = (Math.floor(Number(now) / 60) * 60) as Time;
+    const candleTime = (Math.floor(Number(now) / tfSeconds) * tfSeconds) as Time;
 
     let current = currentCandleRef.current;
 
@@ -219,6 +234,24 @@ export function TradingChart({ pair }: Props) {
           </div>
         )}
       </div>
+
+      {/* Timeframe selector */}
+      <div className="flex items-center gap-1 px-3 py-1.5 border-b border-[#2B3139] shrink-0">
+        {TIMEFRAMES.map((tf) => (
+          <button
+            key={tf.label}
+            onClick={() => setTimeframe(tf.label)}
+            className={`px-2.5 py-0.5 rounded text-[11px] font-medium transition-colors ${
+              timeframe === tf.label
+                ? 'bg-[#F0B90B] text-[#0B0E11]'
+                : 'bg-[#1E2329] text-[#848E9C] hover:text-white hover:bg-[#2B3139]'
+            }`}
+          >
+            {tf.label}
+          </button>
+        ))}
+      </div>
+
       <div ref={chartContainerRef} className="flex-1 w-full min-h-0" />
     </div>
   );
