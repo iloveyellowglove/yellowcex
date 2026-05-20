@@ -1,22 +1,38 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import { createChart, ColorType, type IChartApi, type ISeriesApi, type CandlestickData, type Time } from 'lightweight-charts';
 import { usePriceStore } from '../../store/trading';
-import type { TradingPair } from '@/types/shared';
+import { PAIR_TO_BINANCE_SYMBOL, type TradingPair } from '@/types/shared';
 
 interface Props {
   pair: TradingPair;
+}
+
+interface CandleData {
+  t: number; // time in seconds
+  o: string;
+  h: string;
+  l: string;
+  c: string;
+  v: string;
+}
+
+function binanceSymbol(pair: TradingPair): string {
+  return PAIR_TO_BINANCE_SYMBOL[pair] || pair.replace('/', '').toLowerCase();
 }
 
 export function TradingChart({ pair }: Props) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
-  const candleDataRef = useRef<CandlestickData[]>([]);
   const currentCandleRef = useRef<CandlestickData | null>(null);
-  const price = usePriceStore((s) => s.prices[pair]);
-  const currentPrice = price?.price;
+  const lastPriceRef = useRef<number>(0);
+  const pairRef = useRef(pair);
+  pairRef.current = pair;
+
+  const priceData = usePriceStore((s) => s.prices[pair]);
+  const currentPrice = priceData?.price;
 
   // Initialize chart
   useEffect(() => {
@@ -73,8 +89,8 @@ export function TradingChart({ pair }: Props) {
     seriesRef.current = candleSeries;
 
     const handleResize = () => {
-      if (chartContainerRef.current) {
-        chart.applyOptions({
+      if (chartContainerRef.current && chartRef.current) {
+        chartRef.current.applyOptions({
           width: chartContainerRef.current.clientWidth,
           height: chartContainerRef.current.clientHeight,
         });
@@ -88,60 +104,90 @@ export function TradingChart({ pair }: Props) {
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
+      currentCandleRef.current = null;
     };
   }, []);
 
-  // Reset candles when pair changes
-  useEffect(() => {
-    if (seriesRef.current) {
-      candleDataRef.current = [];
-      currentCandleRef.current = null;
-      seriesRef.current.setData([]);
-    }
-  }, [pair]);
+  // Fetch historical klines on pair change
+  const fetchAndSetCandles = useCallback(async (fetchPair: TradingPair) => {
+    const series = seriesRef.current;
+    if (!series) return;
 
-  // Build candles from price ticks
+    const symbol = binanceSymbol(fetchPair);
+    currentCandleRef.current = null;
+
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/market/candles?symbol=${symbol}&interval=1m&limit=300`
+      );
+      const json = await res.json();
+      if (!json.success || !Array.isArray(json.data)) return;
+
+      const candles: CandleData[] = json.data;
+
+      const data: CandlestickData[] = candles.map((c) => ({
+        time: c.t as Time,
+        open: parseFloat(c.o),
+        high: parseFloat(c.h),
+        low: parseFloat(c.l),
+        close: parseFloat(c.c),
+      }));
+
+      if (data.length > 0) {
+        lastPriceRef.current = parseFloat(candles[candles.length - 1].c);
+        series.setData(data);
+      }
+    } catch {
+      // Silently fail — candle data will populate on next successful fetch
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAndSetCandles(pair);
+  }, [pair, fetchAndSetCandles]);
+
+  // Update current candle from live WebSocket price
   useEffect(() => {
     if (!currentPrice || !seriesRef.current) return;
 
     const priceVal = parseFloat(currentPrice);
-    if (!priceVal) return;
+    if (!priceVal || priceVal <= 0) return;
 
     const now = Math.floor(Date.now() / 1000) as Time;
-    const candleTime = (Math.floor(Number(now) / 60) * 60) as Time; // 1-minute candles
+    const candleTime = (Math.floor(Number(now) / 60) * 60) as Time; // 1-min candle boundary
 
     const series = seriesRef.current;
     let current = currentCandleRef.current;
 
     if (!current || current.time !== candleTime) {
-      // Close previous candle
-      if (current) {
-        candleDataRef.current.push(current);
-        if (candleDataRef.current.length > 300) {
-          candleDataRef.current = candleDataRef.current.slice(-300);
-        }
-        series.setData(candleDataRef.current);
+      // If we have a previous candle, finalize it
+      if (current && pairRef.current === pair) {
+        // Update the series with closed candle
       }
 
-      // Start new candle
+      // Start new candle — open from previous close
+      const open = current ? current.close : lastPriceRef.current || priceVal;
+
       current = {
         time: candleTime,
-        open: priceVal,
-        high: priceVal,
-        low: priceVal,
+        open,
+        high: priceVal > open ? priceVal : open,
+        low: priceVal < open ? priceVal : open,
         close: priceVal,
       };
       currentCandleRef.current = current;
     } else {
-      // Update current candle
+      // Update current candle OHLC
       if (priceVal > current.high) current.high = priceVal;
       if (priceVal < current.low) current.low = priceVal;
       current.close = priceVal;
     }
 
-    // Update the series with all data + current candle
-    series.setData([...candleDataRef.current, current]);
-  }, [currentPrice]);
+    lastPriceRef.current = priceVal;
+
+    // Update the chart with the live candle
+    series.update(current);
+  }, [currentPrice, pair]);
 
   return (
     <div className="h-full flex flex-col">
@@ -154,11 +200,11 @@ export function TradingChart({ pair }: Props) {
             </span>
           )}
         </div>
-        {price && (
+        {priceData && (
           <div className="flex items-center gap-3 text-[10px] text-[#848E9C]">
-            <span>24h H: {parseFloat(price.high24h).toLocaleString()}</span>
-            <span>24h L: {parseFloat(price.low24h).toLocaleString()}</span>
-            <span>Vol: {parseFloat(price.volume24h).toLocaleString()}</span>
+            <span>24h H: {parseFloat(priceData.high24h).toLocaleString()}</span>
+            <span>24h L: {parseFloat(priceData.low24h).toLocaleString()}</span>
+            <span>Vol: {parseFloat(priceData.volume24h).toLocaleString()}</span>
           </div>
         )}
       </div>

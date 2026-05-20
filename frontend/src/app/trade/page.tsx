@@ -22,7 +22,7 @@ export default function TradePage() {
     if (!loading && !user) router.push('/login');
   }, [user, loading, router]);
 
-  useWebSocket();
+  const { status } = useWebSocket(pair);
 
   if (loading || !user) {
     return (
@@ -37,8 +37,26 @@ export default function TradePage() {
       <Header />
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Market selector bar with price data */}
-        <MarketSelector />
+        {/* Market selector bar + status indicator */}
+        <div className="flex items-center">
+          <div className="flex-1 overflow-hidden">
+            <MarketSelector />
+          </div>
+          <div className="flex items-center gap-1.5 px-3 border-l border-[#2B3139] h-10 shrink-0">
+            <span
+              className={`w-2 h-2 rounded-full transition-colors ${
+                status === 'connected'
+                  ? 'bg-[#0ECB81] shadow-[0_0_6px_#0ECB81]'
+                  : status === 'connecting'
+                  ? 'bg-[#F0B90B] animate-pulse'
+                  : 'bg-[#F6465D]'
+              }`}
+            />
+            <span className="text-[10px] text-[#848E9C] uppercase tracking-wider">
+              {status === 'connected' ? 'Live' : status === 'connecting' ? 'Connecting' : 'Offline'}
+            </span>
+          </div>
+        </div>
 
         {/* Main trading grid */}
         <div className="flex-1 grid grid-cols-12 gap-px bg-[#2B3139] overflow-hidden">
