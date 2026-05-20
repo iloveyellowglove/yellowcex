@@ -12,7 +12,7 @@ const statusListeners: Set<(s: WsStatus) => void> = new Set();
 
 function setGlobalStatus(s: WsStatus) {
   globalStatus = s;
-  for (const fn of statusListeners) fn(s);
+  statusListeners.forEach((fn) => fn(s));
 }
 
 export function getWsStatus(): WsStatus {

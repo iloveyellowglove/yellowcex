@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '../lib/auth';
-import { useWebSocket } from '../hooks/useWebSocket';
+
 import { TickerBar } from '../components/trading/TickerBar';
 import { Header } from '../components/layout/Header';
 import { usePriceStore } from '../store/trading';
@@ -210,38 +210,43 @@ const footerColumns = [
 
 export default function HomePage() {
   const { user } = useAuth();
-  useWebSocket();
   const prices = usePriceStore((s) => s.prices);
 
   const [heroVisible, setHeroVisible] = useState(true);
   const heroRef = useRef<HTMLDivElement>(null);
 
-  // Volume cache — fetched once from REST on mount
+  // Fetch prices + volumes once via REST on mount (no WS needed on landing page)
   const volumeCache = useRef<Record<string, string>>({});
   const [volumes, setVolumes] = useState<Record<string, string>>({});
+  const setPrice = usePriceStore((s) => s.setPrice);
 
   useEffect(() => {
     let cancelled = false;
-    async function fetchAllVolumes() {
-      const results: Record<string, string> = {};
-      for (const pair of TRADING_PAIRS) {
-        try {
-          const symbol = pair.replace('/', '').toLowerCase();
-          const res = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/market/ticker/24hr?symbol=${symbol}`
-          );
-          const json = await res.json();
-          if (json.success && json.data?.volume) {
-            results[pair] = json.data.volume;
+    async function fetchMarkets() {
+      try {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/markets`
+        );
+        const json = await res.json();
+        if (!cancelled && json.success && json.data) {
+          const vols: Record<string, string> = {};
+          for (const m of json.data) {
+            setPrice(m.pair as TradingPair, {
+              price: m.lastPrice ?? '0',
+              change24h: m.priceChange24h ?? '0',
+              changePercent24h: m.priceChangePercent24h ?? '0',
+              high24h: m.high24h ?? '0',
+              low24h: m.low24h ?? '0',
+              volume24h: m.volume24h ?? '0',
+            });
+            vols[m.pair] = m.volume24h ?? '0';
           }
-        } catch { /* skip */ }
-      }
-      if (!cancelled) {
-        volumeCache.current = results;
-        setVolumes(results);
-      }
+          volumeCache.current = vols;
+          setVolumes(vols);
+        }
+      } catch { /* skip */ }
     }
-    fetchAllVolumes();
+    fetchMarkets();
     return () => { cancelled = true; };
   }, []);
 

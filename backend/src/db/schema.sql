@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS public.users (
   avatar_url TEXT,
   kyc_status TEXT DEFAULT 'none' CHECK (kyc_status IN ('none', 'pending', 'approved', 'rejected')),
   google_id TEXT UNIQUE,
+  referral_code TEXT UNIQUE,
+  referred_by UUID REFERENCES public.users(id),
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );

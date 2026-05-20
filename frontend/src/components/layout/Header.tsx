@@ -14,6 +14,8 @@ import {
   Wallet,
   FileText,
   Shield,
+  Layers,
+  Users,
 } from 'lucide-react';
 
 export function Header() {
@@ -35,8 +37,10 @@ export function Header() {
 
   const navLinks = [
     { href: '/trade', label: 'Trade', icon: TrendingUp },
+    { href: '/invest', label: 'Invest', icon: Layers },
     { href: '/wallets', label: 'Wallets', icon: Wallet },
     { href: '/orders', label: 'Orders', icon: FileText },
+    { href: '/referral', label: 'Referral', icon: Users },
   ];
 
   return (

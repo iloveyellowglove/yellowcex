@@ -15,6 +15,8 @@ import marketsRoutes from './routes/markets';
 import marketRoutes from './routes/market';
 import tradeRoutes from './routes/trades';
 import adminRoutes from './routes/admin';
+import investmentRoutes from './routes/investments';
+import { distributeDailyReturns } from './services/investmentService';
 import { errorHandler } from './middleware/errorHandler';
 
 const log = {
@@ -68,6 +70,7 @@ app.use('/api/markets', marketsRoutes);
 app.use('/api/market', marketRoutes);
 app.use('/api/trades', tradeRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/investments', investmentRoutes);
 
 // Error handler
 app.use(errorHandler);
@@ -88,6 +91,30 @@ async function start(): Promise<void> {
     server.listen(config.port, () => {
       log.info('Server started', { port: config.port, env: config.nodeEnv, network: config.network });
     });
+
+    // Daily returns distribution — run every 60 minutes
+    setInterval(() => {
+      const start = Date.now();
+      distributeDailyReturns()
+        .then((result) => {
+          log.info('Daily returns distributed', { updated: result.updated, durationMs: Date.now() - start });
+        })
+        .catch((err) => {
+          log.error('Daily returns distribution failed', err);
+        });
+    }, 60 * 60 * 1000);
+
+    // Run once on startup after a short delay
+    setTimeout(() => {
+      log.info('Running initial daily returns distribution');
+      distributeDailyReturns()
+        .then((result) => {
+          log.info('Initial daily returns complete', { updated: result.updated });
+        })
+        .catch((err) => {
+          log.error('Initial daily returns failed', err);
+        });
+    }, 10_000);
   } catch (err) {
     log.error('Failed to start server', err);
     process.exit(1);

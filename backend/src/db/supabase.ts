@@ -11,6 +11,7 @@ export const supabase = createClient(
       persistSession: false,
     },
     realtime: {
+      // required for Node.js < 22
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       transport: WebSocket as any,
     },

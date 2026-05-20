@@ -15,6 +15,7 @@ const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
   name: z.string().min(1),
+  ref: z.string().optional(),
 });
 
 const loginSchema = z.object({
@@ -32,7 +33,7 @@ const googleAuthSchema = z.object({
 // POST /api/auth/register
 router.post('/register', validate(registerSchema), async (req: Request, res: Response) => {
   try {
-    const { email, password, name } = req.body;
+    const { email, password, name, ref } = req.body;
 
     // Check existing user
     const { data: existing } = await supabaseAdmin
@@ -69,7 +70,49 @@ router.post('/register', validate(registerSchema), async (req: Request, res: Res
 
     // Create wallets and balances for all supported currencies
     for (const currency of SUPPORTED_CURRENCIES) {
-      await walletService.createWallet(user.id, currency);
+      try {
+        await walletService.createWallet(user.id, currency);
+      } catch (err) {
+        console.error(`Wallet creation failed for ${user.email} ${currency}:`, err instanceof Error ? err.message : err);
+        // Continue — don't fail registration over wallet creation errors
+      }
+    }
+
+    // Generate a unique referral code for the new user
+    const referralCode = Array.from({ length: 8 }, () =>
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'[Math.floor(Math.random() * 36)]
+    ).join('');
+
+    // Use direct REST call for writes (Supabase JS client may not bypass RLS reliably)
+    const headers = {
+      apikey: config.supabase.serviceRoleKey,
+      Authorization: `Bearer ${config.supabase.serviceRoleKey}`,
+      'Content-Type': 'application/json',
+    };
+
+    await fetch(
+      `${config.supabase.url}/rest/v1/users?id=eq.${encodeURIComponent(user.id)}`,
+      { method: 'PATCH', headers, body: JSON.stringify({ referral_code: referralCode }) }
+    );
+
+    // Process referral if `ref` was provided
+    if (ref) {
+      try {
+        const refRes = await fetch(
+          `${config.supabase.url}/rest/v1/users?select=id&referral_code=eq.${encodeURIComponent(ref)}`,
+          { headers }
+        );
+        const referrers = await refRes.json() as Array<{ id: string }>;
+
+        if (referrers.length > 0) {
+          await fetch(
+            `${config.supabase.url}/rest/v1/users?id=eq.${encodeURIComponent(user.id)}`,
+            { method: 'PATCH', headers, body: JSON.stringify({ referred_by: referrers[0].id }) }
+          );
+        }
+      } catch (err) {
+        console.error('Referral lookup failed:', err instanceof Error ? err.message : err);
+      }
     }
 
     const token = jwt.sign({ userId: user.id, email }, config.jwt.secret, {
