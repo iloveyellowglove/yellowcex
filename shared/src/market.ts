@@ -1,7 +1,6 @@
 export type TradingPair =
   | 'BTC/USDT' | 'ETH/USDT' | 'BNB/USDT' | 'SOL/USDT'
-  | 'XRP/USDT' | 'ADA/USDT' | 'DOGE/USDT' | 'SOL/BTC'
-  | 'BNB/BTC';
+  | 'XRP/USDT' | 'ADA/USDT' | 'DOGE/USDT';
 
 export interface Market {
   pair: TradingPair;
@@ -23,8 +22,7 @@ export interface Ticker {
 
 export const TRADING_PAIRS: TradingPair[] = [
   'BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT',
-  'XRP/USDT', 'ADA/USDT', 'DOGE/USDT', 'SOL/BTC',
-  'BNB/BTC',
+  'XRP/USDT', 'ADA/USDT', 'DOGE/USDT',
 ];
 
 export const PAIR_TO_BINANCE_SYMBOL: Record<TradingPair, string> = {
@@ -35,8 +33,6 @@ export const PAIR_TO_BINANCE_SYMBOL: Record<TradingPair, string> = {
   'XRP/USDT': 'xrpusdt',
   'ADA/USDT': 'adausdt',
   'DOGE/USDT': 'dogeusdt',
-  'SOL/BTC': 'solbtc',
-  'BNB/BTC': 'bnbbtc',
 };
 
 export const TRADING_PAIR_INFO: Record<TradingPair, { base: string; quote: string; basePrecision: number; quotePrecision: number }> = {
@@ -47,6 +43,4 @@ export const TRADING_PAIR_INFO: Record<TradingPair, { base: string; quote: strin
   'XRP/USDT': { base: 'XRP', quote: 'USDT', basePrecision: 4, quotePrecision: 4 },
   'ADA/USDT': { base: 'ADA', quote: 'USDT', basePrecision: 4, quotePrecision: 4 },
   'DOGE/USDT': { base: 'DOGE', quote: 'USDT', basePrecision: 2, quotePrecision: 6 },
-  'SOL/BTC': { base: 'SOL', quote: 'BTC', basePrecision: 6, quotePrecision: 8 },
-  'BNB/BTC': { base: 'BNB', quote: 'BTC', basePrecision: 6, quotePrecision: 8 },
 };

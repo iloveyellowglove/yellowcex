@@ -25,7 +25,6 @@ function formatPriceDisplay(pair: TradingPair, price: string | undefined): strin
   const n = parseFloat(price);
   if (!n) return '—';
   if (pair === 'DOGE/USDT') return n.toFixed(5);
-  if (pair === 'BNB/BTC') return n.toFixed(6);
   if (pair.endsWith('/USDT')) return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return n.toFixed(6);
 }
@@ -214,7 +213,7 @@ export default function HomePage() {
   useWebSocket();
   const prices = usePriceStore((s) => s.prices);
 
-  const [heroVisible, setHeroVisible] = useState(false);
+  const [heroVisible, setHeroVisible] = useState(true);
   const heroRef = useRef<HTMLDivElement>(null);
 
   // Volume cache — fetched once from REST on mount
@@ -430,7 +429,7 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-6 py-14 grid grid-cols-2 md:grid-cols-4 gap-10">
           <CountUpStat value={120000} label="Registered Users" />
           <CountUpStat value={2400} label="24h Volume" suffix="M+" />
-          <CountUpStat value={9} label="Trading Pairs" />
+          <CountUpStat value={7} label="Trading Pairs" />
           <div className="text-center">
             <div className="text-3xl md:text-4xl font-bold text-white mb-1 tabular-nums">99.99%</div>
             <div className="text-xs text-[#848E9C] uppercase tracking-widest">Uptime</div>
