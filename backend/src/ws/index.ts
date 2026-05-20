@@ -40,6 +40,26 @@ class WsManager {
 
       this.clients.add(client);
 
+      // Send cached prices for all pairs immediately on connect
+      for (const pair of TRADING_PAIRS) {
+        const ticker = binanceFeed.getLatestPrice(pair);
+        if (ticker) {
+          ws.send(JSON.stringify({
+            type: 'price_update',
+            payload: {
+              pair,
+              price: ticker.c,
+              change24h: ticker.p,
+              changePercent24h: ticker.P,
+              high24h: ticker.h,
+              low24h: ticker.l,
+              volume24h: ticker.v,
+            },
+            timestamp: Date.now(),
+          }));
+        }
+      }
+
       ws.on('message', (data: Buffer) => {
         try {
           const msg = JSON.parse(data.toString());

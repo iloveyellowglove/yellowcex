@@ -16,6 +16,8 @@ import {
   Shield,
   Layers,
   Users,
+  ArrowDownCircle,
+  ArrowUpCircle,
 } from 'lucide-react';
 
 export function Header() {
@@ -41,6 +43,8 @@ export function Header() {
     { href: '/wallets', label: 'Wallets', icon: Wallet },
     { href: '/orders', label: 'Orders', icon: FileText },
     { href: '/referral', label: 'Referral', icon: Users },
+    { href: '/wallets/deposit', label: 'Deposit', icon: ArrowDownCircle },
+    { href: '/wallets/withdraw', label: 'Withdraw', icon: ArrowUpCircle },
   ];
 
   return (

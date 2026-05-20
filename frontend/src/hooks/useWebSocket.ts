@@ -48,7 +48,6 @@ export function useWebSocket(pair?: TradingPair) {
     ws.onopen = () => {
       reconnectCount.current = 0;
       setGlobalStatus('connected');
-      // Subscribe to the active pair if provided
       if (pair) {
         ws.send(JSON.stringify({ type: 'subscribe', pair }));
       }
@@ -121,12 +120,34 @@ export function useWebSocket(pair?: TradingPair) {
       connect();
     }
 
+    // REST fallback: fetch prices in parallel while WS warms up
+    const prices = usePriceStore.getState().prices;
+    if (Object.keys(prices).length === 0) {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+      fetch(`${apiBase}/api/markets`)
+        .then((res) => res.json())
+        .then((json) => {
+          if (json.success && json.data) {
+            for (const m of json.data) {
+              setPrice(m.pair as TradingPair, {
+                price: m.lastPrice ?? '0',
+                change24h: m.priceChange24h ?? '0',
+                changePercent24h: m.priceChangePercent24h ?? '0',
+                high24h: m.high24h ?? '0',
+                low24h: m.low24h ?? '0',
+                volume24h: m.volume24h ?? '0',
+              });
+            }
+          }
+        })
+        .catch(() => { /* ignore, WS will populate */ });
+    }
+
     return () => {
       mountedRef.current = false;
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
-      // Don't close on pair changes, only on full unmount
     };
-  }, [connect, pair]);
+  }, [connect, pair, setPrice]);
 
   // Cleanup on unmount
   useEffect(() => {

@@ -39,7 +39,10 @@ class BinanceFeed {
     this.SYMBOLS = Object.values(PAIR_TO_BINANCE_SYMBOL);
   }
 
-  connect(): void {
+  async connect(): Promise<void> {
+    // Pre-fetch latest prices via REST so cache is warm before WS connects
+    await this.fetchInitialPrices();
+
     const url = `${config.binance.wsUrl}/${this.SYMBOLS.map((s) => `${s}@ticker`).join('/')}`;
 
     this.ws = new WebSocket(url);
@@ -119,6 +122,46 @@ class BinanceFeed {
   getLatestPrice(pair: TradingPair): TickerData | undefined {
     const symbol = PAIR_TO_BINANCE_SYMBOL[pair];
     return this.latestPrices.get(symbol);
+  }
+
+  private async fetchInitialPrices(): Promise<void> {
+    try {
+      const symbols = this.SYMBOLS.map((s) => s.toUpperCase());
+      const results = await Promise.all(
+        symbols.map(async (symbol) => {
+          const url = `${config.binance.restUrl}/api/v3/ticker/24hr?symbol=${symbol}`;
+          const res = await fetch(url);
+          if (!res.ok) return null;
+          const data = await res.json() as Record<string, string>;
+          // Map REST fields to TickerData (WS format)
+          return {
+            e: '24hrTicker',
+            E: 0,
+            s: data.symbol?.toLowerCase() || symbol.toLowerCase(),
+            p: data.priceChange || '0',
+            P: data.priceChangePercent || '0',
+            w: data.weightedAvgPrice || '0',
+            c: data.lastPrice || '0',
+            Q: data.lastQty || '0',
+            o: data.openPrice || '0',
+            h: data.highPrice || '0',
+            l: data.lowPrice || '0',
+            v: data.volume || '0',
+            q: data.quoteVolume || '0',
+          } as TickerData;
+        })
+      );
+      let cached = 0;
+      for (const ticker of results) {
+        if (ticker) {
+          this.latestPrices.set(ticker.s, ticker);
+          cached++;
+        }
+      }
+      console.log(`Binance REST pre-fetch: cached ${cached}/${results.length} prices`);
+    } catch (err) {
+      console.error('Binance REST pre-fetch error:', err instanceof Error ? err.message : err);
+    }
   }
 
   disconnect(): void {

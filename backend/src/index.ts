@@ -16,6 +16,8 @@ import marketRoutes from './routes/market';
 import tradeRoutes from './routes/trades';
 import adminRoutes from './routes/admin';
 import investmentRoutes from './routes/investments';
+import webhookRoutes from './routes/webhooks';
+import paymentRoutes from './routes/payments';
 import { distributeDailyReturns } from './services/investmentService';
 import { errorHandler } from './middleware/errorHandler';
 
@@ -71,6 +73,8 @@ app.use('/api/market', marketRoutes);
 app.use('/api/trades', tradeRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/investments', investmentRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/api/webhooks', webhookRoutes);
 
 // Error handler
 app.use(errorHandler);
@@ -84,8 +88,8 @@ async function start(): Promise<void> {
     // Load open orders into order book
     await orderbookEngine.loadOpenOrders();
 
-    // Connect to Binance price feed
-    binanceFeed.connect();
+    // Connect to Binance price feed (pre-fetches REST first)
+    await binanceFeed.connect();
 
     // Start server
     server.listen(config.port, () => {

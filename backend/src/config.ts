@@ -54,6 +54,11 @@ export const config = {
         : 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
   },
 
+  plisio: {
+    secretKey: requireEnv('PLISIO_SECRET_KEY'),
+    apiUrl: process.env.PLISIO_API_URL || 'https://plisio.net/api/v1',
+  },
+
   cors: {
     origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
   },
