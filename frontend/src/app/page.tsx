@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '../lib/auth';
 import { useWebSocket } from '../hooks/useWebSocket';
@@ -107,42 +107,73 @@ function Sparkline({ points }: { points: number[] }) {
   );
 }
 
-/* ── Animated BTC card ───────────────────────────────────────── */
+/* ── Animated cycling price card ──────────────────────────────── */
 
 function LivePriceCard() {
-  const btcData = usePriceStore((s) => s.prices['BTC/USDT']);
-  const pairs = usePriceStore((s) => s.prices);
-  const [sparkPoints, setSparkPoints] = useState<number[]>([42000, 42100, 41950, 42300, 42200, 42500, 42400, 42800, 42650, 43000, 43200, 42900, 43400, 43600, 43300, 43800, 44000, 43700, 44200, 44500]);
+  const prices = usePriceStore((s) => s.prices);
+  const [index, setIndex] = useState(0);
+  const [visible, setVisible] = useState(true);
+  const [sparkPoints, setSparkPoints] = useState<number[]>([]);
+  const sparkSeed = useRef(0);
 
-  // Regenerate fake sparkline on mount
+  const pair = TRADING_PAIRS[index];
+  const data = prices[pair];
+  const price = data?.price;
+  const change = data ? parseFloat(data.changePercent24h) : 0;
+  const isPositive = change >= 0;
+
+  // Cycle pairs every 3 seconds
   useEffect(() => {
-    const base = btcData ? parseFloat(btcData.price) : 44000;
+    const id = setInterval(() => {
+      setVisible(false);
+      setTimeout(() => {
+        setIndex((i) => (i + 1) % TRADING_PAIRS.length);
+        setVisible(true);
+      }, 300);
+    }, 3000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Regenerate sparkline when pair changes
+  useEffect(() => {
+    const base = price ? parseFloat(price) : 100;
     const pts: number[] = [];
-    let cur = base * 0.95;
+    sparkSeed.current += 1;
+    // Seeded pseudo-random so each pair looks different
+    let cur = base * (0.92 + (sparkSeed.current % 7) * 0.02);
     for (let i = 0; i < 20; i++) {
-      cur += (Math.random() - 0.45) * (base * 0.008);
+      const seed = (sparkSeed.current * 17 + i * 31) % 100;
+      cur += (seed / 100 - 0.45) * (base * 0.015);
+      if (cur < base * 0.85) cur = base * 0.85;
       pts.push(cur);
     }
     setSparkPoints(pts);
-  }, []);
+  }, [pair, price]);
 
-  const price = btcData?.price;
-  const change = btcData ? parseFloat(btcData.changePercent24h) : 0;
-  const isPositive = change >= 0;
+  const base = pair.split('/')[0];
 
   return (
-    <div className="bg-[#1E2329]/90 backdrop-blur border border-[#2B3139] rounded-xl p-5 w-[260px] shadow-2xl animate-float">
+    <div
+      className="bg-[#1E2329]/90 backdrop-blur border border-[#2B3139] rounded-xl p-5 w-[260px] shadow-2xl animate-float transition-opacity duration-300"
+      style={{ opacity: visible ? 1 : 0 }}
+    >
       <div className="flex items-center gap-2 mb-3">
-        <span className="text-lg">₿</span>
-        <span className="text-sm font-semibold text-white">BTC / USDT</span>
-        <span className={`text-[11px] font-medium ml-auto px-1.5 py-0.5 rounded ${isPositive ? 'text-[#0ECB81] bg-[#0ECB81]/10' : 'text-[#F6465D] bg-[#F6465D]/10'}`}>
-          {isPositive ? '+' : ''}{change.toFixed(2)}%
+        <span className="text-lg">{cryptoIcon(pair)}</span>
+        <span className="text-sm font-semibold text-white">{pair}</span>
+        <span className={`text-[11px] font-medium ml-auto px-1.5 py-0.5 rounded transition-colors ${isPositive ? 'text-[#0ECB81] bg-[#0ECB81]/10' : 'text-[#F6465D] bg-[#F6465D]/10'}`}>
+          {data ? `${isPositive ? '+' : ''}${change.toFixed(2)}%` : '—'}
         </span>
       </div>
       <div className="text-2xl font-bold text-white font-mono mb-2 tracking-tight">
-        ${price ? parseFloat(price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '44,231.52'}
+        {price ? `$${formatPriceDisplay(pair, price)}` : (
+          <span className="inline-block w-28 h-7 bg-[#2B3139] rounded animate-pulse align-middle" />
+        )}
       </div>
-      <Sparkline points={sparkPoints} />
+      {sparkPoints.length > 0 ? (
+        <Sparkline points={sparkPoints} />
+      ) : (
+        <div className="w-full h-7 bg-[#2B3139] rounded animate-pulse" />
+      )}
     </div>
   );
 }
@@ -212,8 +243,33 @@ export default function HomePage() {
   const [heroVisible, setHeroVisible] = useState(false);
   const heroRef = useRef<HTMLDivElement>(null);
 
+  // Volume cache — fetched once from REST on mount
+  const volumeCache = useRef<Record<string, string>>({});
+  const [volumes, setVolumes] = useState<Record<string, string>>({});
+
   useEffect(() => {
-    setHeroVisible(true);
+    let cancelled = false;
+    async function fetchAllVolumes() {
+      const results: Record<string, string> = {};
+      for (const pair of TRADING_PAIRS) {
+        try {
+          const symbol = pair.replace('/', '').toLowerCase();
+          const res = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/market/ticker/24hr?symbol=${symbol}`
+          );
+          const json = await res.json();
+          if (json.success && json.data?.volume) {
+            results[pair] = json.data.volume;
+          }
+        } catch { /* skip */ }
+      }
+      if (!cancelled) {
+        volumeCache.current = results;
+        setVolumes(results);
+      }
+    }
+    fetchAllVolumes();
+    return () => { cancelled = true; };
   }, []);
 
   return (
@@ -305,9 +361,14 @@ export default function HomePage() {
             <tbody>
               {TRADING_PAIRS.map((pair) => {
                 const data = prices[pair];
+                const hasPrice = data?.price && parseFloat(data.price) > 0;
                 const change = data ? parseFloat(data.changePercent24h) : 0;
                 const isPositive = change >= 0;
-                const volume = data ? parseFloat(data.volume24h) : 0;
+                const restVolume = volumes[pair];
+                const wsVolume = data?.volume24h && parseFloat(data.volume24h) > 0 ? data.volume24h : null;
+                const displayVolume = restVolume || wsVolume;
+                const hasVolume = !!displayVolume;
+                const volNum = displayVolume ? parseFloat(displayVolume) : 0;
 
                 return (
                   <tr
@@ -322,14 +383,28 @@ export default function HomePage() {
                         <span className="font-semibold text-white text-sm">{pair}</span>
                       </div>
                     </td>
-                    <td className="py-3.5 px-3 text-right font-mono text-sm text-white tabular-nums">
-                      {formatPriceDisplay(pair, data?.price)}
+                    <td className="py-3.5 px-3 text-right font-mono text-sm tabular-nums">
+                      {hasPrice ? (
+                        <span className="text-white">{formatPriceDisplay(pair, data!.price)}</span>
+                      ) : (
+                        <span className="inline-block w-20 h-4 bg-[#1E2329] rounded animate-pulse align-middle" />
+                      )}
                     </td>
-                    <td className={`py-3.5 px-3 text-right font-mono text-sm tabular-nums ${isPositive ? 'text-[#0ECB81]' : 'text-[#F6465D]'}`}>
-                      {data ? `${isPositive ? '+' : ''}${change.toFixed(2)}%` : '—'}
+                    <td className="py-3.5 px-3 text-right font-mono text-sm tabular-nums">
+                      {data ? (
+                        <span className={isPositive ? 'text-[#0ECB81]' : 'text-[#F6465D]'}>
+                          {isPositive ? '+' : ''}{change.toFixed(2)}%
+                        </span>
+                      ) : (
+                        <span className="inline-block w-14 h-4 bg-[#1E2329] rounded animate-pulse align-middle" />
+                      )}
                     </td>
                     <td className="py-3.5 px-3 text-right text-[#848E9C] text-sm hidden md:table-cell">
-                      {volume > 0 ? `$${(volume / 1e6).toFixed(volume >= 1e6 ? 1 : 2)}M` : '—'}
+                      {hasVolume ? (
+                        `$${(volNum / 1e6).toFixed(volNum >= 1e6 ? 1 : 2)}M`
+                      ) : (
+                        <span className="inline-block w-14 h-4 bg-[#1E2329] rounded animate-pulse align-middle" />
+                      )}
                     </td>
                     <td className="py-3.5 px-3 text-right">
                       <Link
